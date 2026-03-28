@@ -299,7 +299,7 @@
     return PITCH_MIN + curve * (PITCH_MAX - PITCH_MIN);
   }
 
-  // Linear inverse for ghost Y from Hz (teacher positioning; separate from play mapping).
+  // Ghost Y from Hz (linear inverse of 200–1200 span): y = 1 - (freq - 200) / 1000
   function freqToGhostY(freqHz) {
     const y = 1 - (freqHz - PITCH_MIN) / (PITCH_MAX - PITCH_MIN);
     return Math.min(1, Math.max(0, y));
@@ -317,8 +317,8 @@
 
   const SONGS = {
     sargam: buildSong([
-      { note: 'C', duration: 800 }, { note: 'D', duration: 800 }, { note: 'E', duration: 800 },
-      { note: 'F', duration: 800 }, { note: 'G', duration: 900 }
+      { note: 'C', duration: 720 }, { note: 'D', duration: 680 }, { note: 'E', duration: 760 },
+      { note: 'F', duration: 640 }, { note: 'G', duration: 1100 }
     ]),
     birthday: buildSong([
       { note: 'C', duration: 420 }, { note: 'C', duration: 200 }, { note: 'D', duration: 700 }, { note: 'C', duration: 700 },
@@ -328,9 +328,13 @@
     ])
   };
 
-  const GHOST_X_NORM = 0.34;
+  /** Fixed X (~67% from left on mirrored canvas) — separation from player’s hand */
+  const GHOST_X_NORM = 0.33;
   const LEARN_ALIGN_THRESH = 0.05;
+  /** ghostY = ghostY * 0.9 + targetY * 0.1 — never jump */
   const GHOST_SMOOTH = 0.1;
+  /** Slightly long ramp so notes overlap and feel “leading” */
+  const GUIDE_FREQ_RAMP_S = 0.16;
 
   function snapToScale(freq, scaleArr) {
     let closest = scaleArr[0];
@@ -482,6 +486,7 @@
     lastLearnSegmentStartMs = -1;
     stopGuideAudio();
     if (btnLearn) btnLearn.classList.remove('learn-active');
+    if (learnPanel) learnPanel.classList.add('hidden');
   }
 
   function ensureGuideAudio() {
@@ -523,10 +528,10 @@
       const now = audioCtx.currentTime;
       guideOsc.frequency.cancelScheduledValues(now);
       guideOsc.frequency.setValueAtTime(guideOsc.frequency.value, now);
-      guideOsc.frequency.linearRampToValueAtTime(seg.freq, now + 0.12);
+      guideOsc.frequency.linearRampToValueAtTime(seg.freq, now + GUIDE_FREQ_RAMP_S);
       guideGain.gain.cancelScheduledValues(now);
       guideGain.gain.setValueAtTime(guideGain.gain.value, now);
-      guideGain.gain.linearRampToValueAtTime(0.13, now + 0.05);
+      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
     }
   }
 
@@ -552,7 +557,7 @@
       guideOsc.frequency.setValueAtTime(first, now);
       guideGain.gain.cancelScheduledValues(now);
       guideGain.gain.setValueAtTime(0, now);
-      guideGain.gain.linearRampToValueAtTime(0.13, now + 0.06);
+      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
     }
     lastLearnSegmentStartMs = 0;
   }
@@ -730,26 +735,31 @@
     return { x: (1 - lm.x) * w, y: lm.y * h };
   }
 
-  /** Uses global HAND_CONNECTIONS from MediaPipe Hands. */
+  /** Minimal guide: palm hint (outline) + fingertip; muted white, no skeleton */
   function drawGhostHand(aligned) {
     const w = canvas.width;
     const h = canvas.height;
     const px = (1 - GHOST_X_NORM) * w;
     const py = ghostY * h;
-    const baseOpacity = 0.26;
-    const opacity = aligned ? 0.34 : baseOpacity;
-    const tint = aligned ? [198, 238, 212] : [236, 240, 248];
+    const base = 0.24;
+    const opacity = aligned ? 0.29 : base;
+    const tint = aligned ? [188, 228, 205] : [232, 234, 240];
     ctx.save();
-    ctx.shadowBlur = aligned ? 18 : 14;
-    ctx.shadowColor = aligned ? 'rgba(170, 210, 190, 0.4)' : 'rgba(228, 234, 244, 0.2)';
-    ctx.globalAlpha = opacity * 0.42;
-    ctx.strokeStyle = 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0.5)';
-    ctx.lineWidth = 0.85;
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = opacity * 0.55;
+    ctx.strokeStyle = 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0.35)';
+    ctx.lineWidth = 0.75;
     ctx.beginPath();
-    ctx.arc(px, py + 22, 28, 0, Math.PI * 2);
+    ctx.arc(px, py + 22, 27, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.shadowBlur = aligned ? 16 : 12;
+    ctx.shadowColor = aligned ? 'rgba(160, 200, 175, 0.35)' : 'rgba(220, 226, 236, 0.22)';
     ctx.globalAlpha = opacity;
-    ctx.fillStyle = 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0.52)';
+    const g = ctx.createRadialGradient(px, py, 0, px, py, 12);
+    g.addColorStop(0, 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0.55)');
+    g.addColorStop(0.65, 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0.22)');
+    g.addColorStop(1, 'rgba(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ',0)');
+    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(px, py, 11, 0, Math.PI * 2);
     ctx.fill();
