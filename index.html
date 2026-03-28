@@ -144,41 +144,52 @@
   'use strict';
 
   /*
-   * Two-hand theremin (mirrored video): wrist x sorts hands — smaller raw x = further right on screen.
-   * - Rightmost hand → pitch (landmark 8 y → 200–1200 Hz or C-major).
-   * - Leftmost hand → volume (landmark 8 y, inverted: higher hand = louder).
-   * - Pitch hand openness (palm→fingertip distances) → +Hz offset + vibrato depth.
-   * - One hand only → pitch from that hand; volume target fixed at 0.5.
-   * Smoothing: pitch, volume, openness each use smooth = prev*0.8 + current*0.2.
-   * Audio: OscillatorNode + GainNode; start only after "Start".
+   * Two-hand theremin: pitch uses avg Y of MCP joints (5,9,13); exponential pitch curve.
+   * Velocity-based smoothing + dead zone on pitch / volume Y / openness; Web Audio ramps on freq & gain.
    */
 
-  // --- Pitch mapping: C major frequencies in ~200–1200 Hz (scale lock) ---
-  const C_MAJOR_FREQS = [
-    261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
-    587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50
+  // C major (multiple octaves) — used when “C Major Lock” snaps continuous pitch to nearest note.
+  const scale = [
+    130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94,
+    261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88
   ];
 
   const PITCH_MIN = 200;
   const PITCH_MAX = 1200;
 
-  // Mapping: vertical y — top of frame (y→0) maps to high pitch; bottom (y→1) to low pitch.
-  function yToRawPitchHz(yNorm, scaleLock) {
-    const t = 1 - yNorm; // 0 at bottom, 1 at top
-    if (scaleLock) {
-      const n = C_MAJOR_FREQS.length;
-      const idx = Math.min(n - 1, Math.max(0, Math.round(t * (n - 1))));
-      return C_MAJOR_FREQS[idx];
+  const STABLE_Y_IDS = [5, 9, 13];
+
+  function avgStableY(landmarks) {
+    return (
+      landmarks[STABLE_Y_IDS[0]].y +
+      landmarks[STABLE_Y_IDS[1]].y +
+      landmarks[STABLE_Y_IDS[2]].y
+    ) / 3;
+  }
+
+  // curve = (1-y)^2 → freq = 200 + curve * 1000 (always; snapping is optional)
+  function continuousFreqFromY(yNorm) {
+    const curve = Math.pow(1 - yNorm, 2);
+    return PITCH_MIN + curve * (PITCH_MAX - PITCH_MIN);
+  }
+
+  function snapToScale(freq, scaleArr) {
+    let closest = scaleArr[0];
+    let minDiff = Math.abs(freq - closest);
+    for (let note of scaleArr) {
+      const diff = Math.abs(freq - note);
+      if (diff < minDiff) {
+        closest = note;
+        minDiff = diff;
+      }
     }
-    return PITCH_MIN + t * (PITCH_MAX - PITCH_MIN);
+    return closest;
   }
 
   // Volume hand: Y-axis inverted — top of frame (y→0) = louder, bottom (y→1) = quieter.
   function yToRawVolume(yNorm) {
     return Math.min(1, Math.max(0, 1 - yNorm));
   }
-
-  const VOLUME_SINGLE_HAND = 0.5;
 
   // Sort hand indices by wrist (0) x ascending: first = rightmost on mirrored display = pitch.
   function sortHandsPitchThenVolume(landmarksList) {
@@ -217,9 +228,21 @@
   const VIBRATO_RATE = 10;
   const VIBRATO_DEPTH_MAX = 20;
 
-  // Smoothing: smooth = prev * 0.8 + current * 0.2 (applied to frequency and volume targets).
-  const SMOOTH_PREV = 0.8;
-  const SMOOTH_CUR = 0.2;
+  // Dead zone + velocity-based alpha: smooth = prev*(1-a) + cur*a; a = 0.3 if fast else 0.05
+  const DEAD_ZONE = 0.005;
+  const VELOCITY_THRESH = 0.02;
+  const ALPHA_FAST = 0.3;
+  const ALPHA_SLOW = 0.05;
+  const AUDIO_RAMP_S = 0.04;
+  const AUDIO_RAMP_PITCH_SNAP_S = 0.08;
+  const GAIN_FADE_OUT_S = 0.1;
+
+  function adaptiveSmooth(prevRaw, currRaw, smooth) {
+    const vel = Math.abs(currRaw - prevRaw);
+    const input = vel < DEAD_ZONE ? prevRaw : currRaw;
+    const alpha = vel > VELOCITY_THRESH ? ALPHA_FAST : ALPHA_SLOW;
+    return smooth * (1 - alpha) + input * alpha;
+  }
 
   /** @type {AudioContext | null} */
   let audioCtx = null;
@@ -229,9 +252,14 @@
   let gainNode = null;
   let audioRunning = false;
 
-  let smoothFreq = PITCH_MIN;
+  let prevRawPitchY = 0.5;
+  let prevRawVolY = 0.5;
+  let prevRawOpen = 0;
+  let smoothPitchY = 0.5;
+  let smoothVolY = 0.5;
   let smoothVol = 0;
   let smoothOpen = 0;
+  let lastHandCount = 0;
 
   const video = document.getElementById('video');
   const canvas = document.getElementById('overlay');
@@ -267,7 +295,9 @@
     gainNode.gain.value = 0;
     osc = audioCtx.createOscillator();
     osc.type = waveTypeEl.value;
-    osc.frequency.value = smoothFreq;
+    const cont0 = continuousFreqFromY(smoothPitchY);
+    const center0 = cont0 + smoothOpen * OPEN_PITCH_HZ;
+    osc.frequency.value = scaleLockEl.checked ? snapToScale(center0, scale) : center0;
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
     osc.start();
@@ -289,6 +319,7 @@
     osc = null;
     gainNode = null;
     audioRunning = false;
+    lastHandCount = 0;
     btnStart.disabled = false;
     btnStop.disabled = true;
   }
@@ -300,43 +331,74 @@
   btnStart.addEventListener('click', startAudio);
   btnStop.addEventListener('click', stopAudio);
 
-  function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks) {
+  function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks) {
     const scaleLock = scaleLockEl.checked;
-    let targetFreq = smoothFreq;
-    let targetVol = 0;
-    let targetOpen = 0;
 
-    if (handCount === 0) {
-      targetFreq = smoothFreq;
-      targetVol = 0;
-    } else if (handCount === 1 && pitchLm8) {
-      targetFreq = yToRawPitchHz(pitchLm8.y, scaleLock);
-      targetVol = VOLUME_SINGLE_HAND;
-    } else if (handCount >= 2 && pitchLm8 && volLm8) {
-      targetFreq = yToRawPitchHz(pitchLm8.y, scaleLock);
-      targetVol = yToRawVolume(volLm8.y);
+    if (pitchHandLandmarks) {
+      const currPitchY = avgStableY(pitchHandLandmarks);
+      smoothPitchY = adaptiveSmooth(prevRawPitchY, currPitchY, smoothPitchY);
+      prevRawPitchY = currPitchY;
+    }
+
+    if (handCount >= 2 && volHandLandmarks) {
+      const currVolY = avgStableY(volHandLandmarks);
+      smoothVolY = adaptiveSmooth(prevRawVolY, currVolY, smoothVolY);
+      prevRawVolY = currVolY;
+      smoothVol = yToRawVolume(smoothVolY);
+    } else if (handCount === 1) {
+      smoothVolY = adaptiveSmooth(prevRawVolY, 0.5, smoothVolY);
+      prevRawVolY = 0.5;
+      smoothVol = yToRawVolume(smoothVolY);
+    } else {
+      smoothVolY = adaptiveSmooth(prevRawVolY, 1, smoothVolY);
+      prevRawVolY = 1;
+      smoothVol = yToRawVolume(smoothVolY);
     }
 
     if (pitchHandLandmarks) {
-      targetOpen = handOpennessNormalized(pitchHandLandmarks);
+      const currOpen = handOpennessNormalized(pitchHandLandmarks);
+      smoothOpen = adaptiveSmooth(prevRawOpen, currOpen, smoothOpen);
+      prevRawOpen = currOpen;
+    } else {
+      smoothOpen = adaptiveSmooth(prevRawOpen, 0, smoothOpen);
+      prevRawOpen = 0;
     }
 
-    smoothFreq = smoothFreq * SMOOTH_PREV + targetFreq * SMOOTH_CUR;
-    smoothVol = smoothVol * SMOOTH_PREV + targetVol * SMOOTH_CUR;
-    smoothOpen = smoothOpen * SMOOTH_PREV + targetOpen * SMOOTH_CUR;
-
-    const centerHz = smoothFreq + smoothOpen * OPEN_PITCH_HZ;
-    freqLine.textContent = 'Frequency: ' + centerHz.toFixed(1) + ' Hz';
+    const continuousHz = continuousFreqFromY(smoothPitchY);
+    const centerHz = continuousHz + smoothOpen * OPEN_PITCH_HZ;
+    const targetPitchHz = scaleLock ? snapToScale(centerHz, scale) : centerHz;
+    freqLine.textContent =
+      'Frequency: ' +
+      targetPitchHz.toFixed(2) +
+      ' Hz' +
+      (scaleLock ? ' (C major)' : ' (continuous)');
     volLine.textContent = 'Volume: ' + smoothVol.toFixed(3);
     openLine.textContent = 'Open: ' + smoothOpen.toFixed(2);
 
+    const hadHands = lastHandCount > 0;
+    const handsLost = handCount === 0 && hadHands;
+    lastHandCount = handCount;
+
     if (!audioRunning || !audioCtx || !osc || !gainNode) return;
 
-    const t = audioCtx.currentTime;
-    const vibrato = Math.sin(t * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
-    const finalHz = centerHz + vibrato;
-    osc.frequency.setValueAtTime(finalHz, t);
-    gainNode.gain.setValueAtTime(smoothVol, t);
+    const now = audioCtx.currentTime;
+    const vibrato = Math.sin(now * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
+    const finalHz = targetPitchHz + vibrato;
+    const pitchRampS = scaleLock ? AUDIO_RAMP_PITCH_SNAP_S : AUDIO_RAMP_S;
+
+    if (handsLost) {
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+      gainNode.gain.linearRampToValueAtTime(0, now + GAIN_FADE_OUT_S);
+    } else if (handCount > 0) {
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+      gainNode.gain.linearRampToValueAtTime(smoothVol, now + AUDIO_RAMP_S);
+    }
+
+    osc.frequency.cancelScheduledValues(now);
+    osc.frequency.setValueAtTime(osc.frequency.value, now);
+    osc.frequency.linearRampToValueAtTime(finalHz, now + pitchRampS);
   }
 
   function drawFingerDotAt(lm8, glowInner, glowMid, core) {
@@ -468,6 +530,7 @@
     let pitchLm8 = null;
     let volLm8 = null;
     let pitchHandLandmarks = null;
+    let volHandLandmarks = null;
     let order = [];
 
     if (handCount > 0) {
@@ -475,8 +538,8 @@
       pitchHandLandmarks = list[order[0]];
       pitchLm8 = pitchHandLandmarks[8];
       if (handCount >= 2) {
-        const volHand = list[order[1]];
-        volLm8 = volHand[8];
+        volHandLandmarks = list[order[1]];
+        volLm8 = volHandLandmarks[8];
       }
     }
 
@@ -488,7 +551,7 @@
       handLine.textContent = 'Hands: 2 — green pitch · blue volume';
     }
 
-    applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks);
+    applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks);
     drawFingerDots(pitchLm8, volLm8, handCount, list, order);
   }
 
