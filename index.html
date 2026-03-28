@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Theremin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0f;
+      color: #e8e8f0;
+    }
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    #video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: block;
+    }
+    #hud {
+      position: absolute;
+      left: 1rem;
+      top: 1rem;
+      z-index: 2;
+      pointer-events: none;
+      text-shadow: 0 0 8px #000, 0 1px 2px #000;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    #controls {
+      position: absolute;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 2;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: flex-end;
+      max-width: min(100% - 2rem, 28rem);
+    }
+    #controls button,
+    #controls label {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    button {
+      padding: 0.55rem 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      background: rgba(20, 20, 35, 0.85);
+      color: #fff;
+      font-size: 0.9rem;
+    }
+    button:hover {
+      background: rgba(40, 40, 70, 0.9);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    #controls select {
+      padding: 0.45rem 0.6rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(20, 20, 35, 0.85);
+      color: #fff;
+      font-size: 0.85rem;
+    }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(20, 20, 35, 0.85);
+      font-size: 0.85rem;
+      user-select: none;
+    }
+    .toggle input { accent-color: #7cf; }
+    #hint {
+      position: absolute;
+      left: 50%;
+      bottom: 5rem;
+      transform: translateX(-50%);
+      z-index: 1;
+      font-size: 0.85rem;
+      opacity: 0.7;
+      text-shadow: 0 0 6px #000;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <video id="video" playsinline></video>
+    <canvas id="overlay"></canvas>
+    <div id="hud">
+      <div id="freqLine">Frequency: — Hz</div>
+      <div id="volLine">Volume: —</div>
+      <div id="handLine">Hand: —</div>
+    </div>
+    <p id="hint">Raise your index finger · up = higher pitch · right = louder</p>
+    <div id="controls">
+      <button type="button" id="btnStart">Start</button>
+      <button type="button" id="btnStop" disabled>Stop</button>
+      <label class="toggle">
+        <input type="checkbox" id="scaleLock" />
+        C major lock
+      </label>
+      <label for="waveType">Wave</label>
+      <select id="waveType">
+        <option value="sine" selected>sine</option>
+        <option value="triangle">triangle</option>
+        <option value="sawtooth">sawtooth</option>
+      </select>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script>
+(function () {
+  'use strict';
+
+  /*
+   * Mapping (landmark 8 = index fingertip, normalized x,y in [0,1]):
+   * - Pitch: vertical position — smaller y (hand higher) => higher Hz, range 200–1200 (or C-major table).
+   * - Volume: horizontal x => gain 0–1 (left quiet, right loud).
+   * Smoothing: each frame, smoothed = previous * 0.8 + current * 0.2 (freq and vol).
+   * Audio: OscillatorNode + GainNode; context/oscillator start only after "Start" (user gesture).
+   */
+
+  // --- Pitch mapping: C major frequencies in ~200–1200 Hz (scale lock) ---
+  const C_MAJOR_FREQS = [
+    261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
+    587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50
+  ];
+
+  const PITCH_MIN = 200;
+  const PITCH_MAX = 1200;
+
+  // Mapping: vertical y — top of frame (y→0) maps to high pitch; bottom (y→1) to low pitch.
+  function yToRawPitchHz(yNorm, scaleLock) {
+    const t = 1 - yNorm; // 0 at bottom, 1 at top
+    if (scaleLock) {
+      const n = C_MAJOR_FREQS.length;
+      const idx = Math.min(n - 1, Math.max(0, Math.round(t * (n - 1))));
+      return C_MAJOR_FREQS[idx];
+    }
+    return PITCH_MIN + t * (PITCH_MAX - PITCH_MIN);
+  }
+
+  // Mapping: horizontal x — 0 = silent side, 1 = full volume.
+  function xToRawVolume(xNorm) {
+    return Math.min(1, Math.max(0, xNorm));
+  }
+
+  // Smoothing: smooth = prev * 0.8 + current * 0.2 (applied to frequency and volume targets).
+  const SMOOTH_PREV = 0.8;
+  const SMOOTH_CUR = 0.2;
+
+  /** @type {AudioContext | null} */
+  let audioCtx = null;
+  /** @type {OscillatorNode | null} */
+  let osc = null;
+  /** @type {GainNode | null} */
+  let gainNode = null;
+  let audioRunning = false;
+
+  let smoothFreq = PITCH_MIN;
+  let smoothVol = 0;
+
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const btnStart = document.getElementById('btnStart');
+  const btnStop = document.getElementById('btnStop');
+  const scaleLockEl = document.getElementById('scaleLock');
+  const waveTypeEl = document.getElementById('waveType');
+  const freqLine = document.getElementById('freqLine');
+  const volLine = document.getElementById('volLine');
+  const handLine = document.getElementById('handLine');
+
+  function resizeCanvas() {
+    const w = video.videoWidth || window.innerWidth;
+    const h = video.videoHeight || window.innerHeight;
+    if (w && h) {
+      canvas.width = w;
+      canvas.height = h;
+    } else {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+  }
+
+  window.addEventListener('resize', resizeCanvas);
+
+  // Audio setup: one oscillator into a gain node; no sound until Start (unlocks AudioContext).
+  function startAudio() {
+    if (audioRunning) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0;
+    osc = audioCtx.createOscillator();
+    osc.type = waveTypeEl.value;
+    osc.frequency.value = smoothFreq;
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    audioRunning = true;
+    btnStart.disabled = true;
+    btnStop.disabled = false;
+  }
+
+  function stopAudio() {
+    if (!audioRunning || !osc || !audioCtx) return;
+    try {
+      osc.stop();
+      osc.disconnect();
+    } catch (_) {}
+    if (gainNode) gainNode.disconnect();
+    audioCtx.close().catch(function () {});
+    audioCtx = null;
+    osc = null;
+    gainNode = null;
+    audioRunning = false;
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+  }
+
+  waveTypeEl.addEventListener('change', function () {
+    if (osc) osc.type = waveTypeEl.value;
+  });
+
+  btnStart.addEventListener('click', startAudio);
+  btnStop.addEventListener('click', stopAudio);
+
+  function applyAudioFromLandmark(lm8, handDetected) {
+    const scaleLock = scaleLockEl.checked;
+    let targetFreq = smoothFreq;
+    let targetVol = 0;
+
+    if (handDetected && lm8) {
+      // Landmark 8: index finger tip — x,y normalized 0–1
+      targetFreq = yToRawPitchHz(lm8.y, scaleLock);
+      targetVol = xToRawVolume(lm8.x);
+    }
+
+    smoothFreq = smoothFreq * SMOOTH_PREV + targetFreq * SMOOTH_CUR;
+    smoothVol = smoothVol * SMOOTH_PREV + targetVol * SMOOTH_CUR;
+
+    freqLine.textContent = 'Frequency: ' + smoothFreq.toFixed(1) + ' Hz';
+    volLine.textContent = 'Volume: ' + smoothVol.toFixed(3);
+
+    if (!audioRunning || !audioCtx || !osc || !gainNode) return;
+
+    const t = audioCtx.currentTime;
+    osc.frequency.setValueAtTime(smoothFreq, t);
+    gainNode.gain.setValueAtTime(smoothVol, t);
+  }
+
+  function drawFingerDot(lm8, handDetected) {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!handDetected || !lm8) return;
+
+    // Mirror x to match mirrored video
+    const px = (1 - lm8.x) * w;
+    const py = lm8.y * h;
+
+    const glow = ctx.createRadialGradient(px, py, 0, px, py, 28);
+    glow.addColorStop(0, 'rgba(120, 255, 255, 0.95)');
+    glow.addColorStop(0.35, 'rgba(80, 200, 255, 0.4)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(px, py, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(200, 255, 255, 0.95)';
+    ctx.beginPath();
+    ctx.arc(px, py, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function onResults(results) {
+    const handDetected = !!(results.multiHandLandmarks && results.multiHandLandmarks.length);
+    handLine.textContent = handDetected ? 'Hand: detected' : 'Hand: none (muted)';
+
+    let lm8 = null;
+    if (handDetected) {
+      lm8 = results.multiHandLandmarks[0][8];
+    }
+
+    applyAudioFromLandmark(lm8, handDetected);
+    drawFingerDot(lm8, handDetected);
+  }
+
+  const hands = new Hands({
+    locateFile: function (file) {
+      return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + file;
+    }
+  });
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+  hands.onResults(onResults);
+
+  const camera = new Camera(video, {
+    onFrame: async function () {
+      await hands.send({ image: video });
+    },
+    width: 1280,
+    height: 720
+  });
+
+  video.addEventListener('loadeddata', function () {
+    resizeCanvas();
+  });
+
+  camera.start().catch(function (err) {
+    handLine.textContent = 'Camera error: ' + (err && err.message ? err.message : String(err));
+  });
+})();
+  </script>
+</body>
+</html>
