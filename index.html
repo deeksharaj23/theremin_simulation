@@ -218,19 +218,123 @@
     .learn-panel button:hover {
       background: rgba(38, 38, 56, 0.85);
     }
+    #calibration-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(6, 6, 12, 0.88);
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+    #calibration-overlay.hidden {
+      display: none;
+    }
+    .cal-card {
+      max-width: 22rem;
+      padding: 1.25rem 1.35rem;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(18, 18, 32, 0.95);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+    .cal-card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #e8e8f8;
+    }
+    .cal-card p {
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: rgba(232, 232, 242, 0.88);
+      margin-bottom: 1rem;
+    }
+    .cal-card .cal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .cal-card button {
+      padding: 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(32, 40, 72, 0.9);
+      color: #fff;
+      cursor: pointer;
+    }
+    .cal-card button:hover {
+      background: rgba(48, 56, 96, 0.95);
+    }
+    .cal-card button.secondary {
+      background: rgba(40, 40, 52, 0.75);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    #pitch-strip {
+      position: absolute;
+      left: 50%;
+      bottom: 6.25rem;
+      transform: translateX(-50%);
+      width: min(92vw, 520px);
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(60, 120, 255, 0.45), rgba(255, 120, 220, 0.35));
+      z-index: 3;
+      pointer-events: none;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+    }
+    #pitch-strip .pitch-mark {
+      position: absolute;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      margin-left: 0;
+      box-shadow: 0 0 12px currentColor;
+    }
+    #pitch-strip .pitch-mark.you {
+      background: rgba(120, 255, 160, 0.95);
+      color: rgba(120, 255, 160, 0.95);
+      z-index: 2;
+    }
+    #pitch-strip .pitch-mark.ghost {
+      background: rgba(255, 255, 255, 0.55);
+      color: rgba(255, 255, 255, 0.6);
+      z-index: 1;
+    }
+    #pitch-strip .pitch-mark.ghost.hidden {
+      display: none;
+    }
+    .meter-row {
+      font-size: 0.82rem;
+      opacity: 0.92;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
   <div id="app">
     <video id="video" playsinline></video>
     <canvas id="overlay"></canvas>
+    <div id="pitch-strip" aria-hidden="true">
+      <span id="pitchMarkYou" class="pitch-mark you" style="left: 50%"></span>
+      <span id="pitchMarkGhost" class="pitch-mark ghost hidden" style="left: 50%"></span>
+    </div>
     <div id="hud">
       <div id="freqLine">Frequency: — Hz</div>
       <div id="volLine">Volume: —</div>
       <div id="handLine">Hand: —</div>
       <div id="openLine">Open: —</div>
+      <div id="modeLine" class="meter-row">Mode: —</div>
+      <div id="intentLine" class="meter-row">Intent: —</div>
+      <div id="featureLine" class="meter-row">Open / Spread / Curve / Stability: —</div>
     </div>
-    <p id="hint">Two hands: right = pitch (green), left = volume (blue) — raise your left hand higher for louder. One hand: pitch only, volume fixed at half.</p>
+    <p id="hint">Pitch: index X (horizontal line) · right hand = pitch, left = volume · Learn mode: C Major snap on by default</p>
     <div id="learn-wrap">
       <button type="button" id="btnLearn">Learn to play</button>
       <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
@@ -241,7 +345,7 @@
     <div id="controls">
       <div class="controls-panel">
         <div class="controls-row">
-          <button type="button" id="btnStart" class="icon-btn" aria-label="Start">
+          <button type="button" id="btnStart" class="icon-btn" aria-label="Start" disabled>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
           </button>
           <button type="button" id="btnStop" class="icon-btn" aria-label="Stop" disabled>
@@ -264,10 +368,25 @@
             <option value="sawtooth">sawtooth</option>
           </select>
         </div>
+        <button type="button" id="btnRecalibrate" class="control-field" style="cursor:pointer;border-radius:8px;font-size:0.85rem;">
+          Calibrate
+        </button>
       </div>
     </div>
   </div>
 
+  <div id="calibration-overlay" role="dialog" aria-labelledby="cal-title" aria-modal="true">
+    <div class="cal-card">
+      <h2 id="cal-title">Instrument calibration</h2>
+      <p id="cal-instruction"></p>
+      <div class="cal-actions">
+        <button type="button" id="cal-capture">Capture</button>
+        <button type="button" id="cal-skip" class="secondary">skip (defaults)</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script>
@@ -275,19 +394,15 @@
   'use strict';
 
   /*
-   * Pipeline (real-time, single MediaPipe onResults loop — no React / no duplicate rAF):
-   *   Camera → Hands → onResults → applyAudioFromHands (REAL landmarks only; never ghost/learn state)
-   *         → main osc + gain → destination
-   *   Learn mode: updateLearnPlayback (ghostY + optional guide osc) runs after audio mapping; visual only
-   *   for alignment overlay — does not branch out of applyAudioFromHands and does not mute the theremin.
+   * INPUT → FEATURES → INTENT → SOUND (single MediaPipe onResults; learn/ghost never override real landmarks)
+   * Pitch anchor: index tip (8) X only — not finger-mapped to discrete notes.
+   * Tone.js: Synth → Filter → Gain → destination; learn guide is separate Tone oscillator.
    */
 
-  // Dev-only: localStorage.setItem('thereminDebug','1') then reload — throttled console pipeline logs.
   const DEBUG_PIPELINE =
     typeof localStorage !== 'undefined' && localStorage.getItem('thereminDebug') === '1';
   let debugFrameCounter = 0;
 
-  // C major (multiple octaves) — used when “C Major Lock” snaps continuous pitch to nearest note.
   const scale = [
     130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94,
     261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88
@@ -295,6 +410,51 @@
 
   const PITCH_MIN = 200;
   const PITCH_MAX = 1200;
+  const INDEX_TIP = 8;
+  const THUMB_TIP = 4;
+  const PINKY_TIP = 20;
+  const PITCH_LERP_BASE = 0.12;
+  const MICRO_TUNE_HZ = 45;
+  const VIBRATO_SPEED = 5.5;
+  const JITTER_RING = 16;
+  const VEL_FAST = 0.08;
+  const HOLD_STAB_THRESH = 2.2;
+  const HOLD_VEL_THRESH = 0.012;
+  const TRANS_VEL_LOW = 0.018;
+  const TRANS_VEL_HIGH = 0.07;
+  const CURVE_DAMP = 0.35;
+  const FILTER_MIN = 500;
+  const FILTER_MAX = 5200;
+  const GAIN_RAMP_FAST = 0.02;
+  const GAIN_RAMP_SLOW = 0.12;
+
+  /** @type {{ spreadMin:number, spreadMax:number, openMin:number, openMax:number, curvatureBaseline:number, pitchXMin:number, pitchXMax:number }} */
+  let cal = {
+    spreadMin: 0.02,
+    spreadMax: 0.38,
+    openMin: 0.02,
+    openMax: 0.24,
+    curvatureBaseline: 2.15,
+    pitchXMin: 0.12,
+    pitchXMax: 0.88
+  };
+
+  function loadCalFromStorage() {
+    try {
+      const s = localStorage.getItem('thereminCal');
+      if (s) {
+        const o = JSON.parse(s);
+        if (o && typeof o === 'object') {
+          cal = Object.assign({}, cal, o);
+        }
+      }
+    } catch (_) {}
+  }
+  function saveCalToStorage() {
+    try {
+      localStorage.setItem('thereminCal', JSON.stringify(cal));
+    } catch (_) {}
+  }
 
   const STABLE_Y_IDS = [5, 9, 13];
 
@@ -309,18 +469,68 @@
     return Math.min(1, Math.max(0, y));
   }
 
-  // curve = (1-y)^2 → freq = 200 + curve * 1000 (always; snapping is optional)
-  function continuousFreqFromY(yNorm) {
-    const y = Number.isFinite(yNorm) ? Math.min(1, Math.max(0, yNorm)) : 0.5;
-    const curve = Math.pow(1 - y, 2);
-    const hz = PITCH_MIN + curve * (PITCH_MAX - PITCH_MIN);
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function norm01(v, lo, hi) {
+    if (!Number.isFinite(v)) return 0.5;
+    if (hi <= lo) return 0.5;
+    return Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+  }
+
+  /** Map index X (camera space 0–1) to Hz; left→right = low→high */
+  function hzFromPitchX(xNorm) {
+    const x = Number.isFinite(xNorm) ? Math.min(1, Math.max(0, xNorm)) : 0.5;
+    const t = norm01(x, cal.pitchXMin, cal.pitchXMax);
+    const hz = PITCH_MIN + t * (PITCH_MAX - PITCH_MIN);
     return Number.isFinite(hz) ? hz : PITCH_MIN;
   }
 
-  // Ghost Y from Hz (linear inverse of 200–1200 span): y = 1 - (freq - 200) / 1000
-  function freqToGhostY(freqHz) {
-    const y = 1 - (freqHz - PITCH_MIN) / (PITCH_MAX - PITCH_MIN);
-    return Math.min(1, Math.max(0, y));
+  /** Normalized X (0–1) where pitch strip matches: 0 = low freq, 1 = high freq */
+  function normXFromHz(freqHz) {
+    const t = (freqHz - PITCH_MIN) / (PITCH_MAX - PITCH_MIN);
+    const x = cal.pitchXMin + Math.min(1, Math.max(0, t)) * (cal.pitchXMax - cal.pitchXMin);
+    return Math.min(1, Math.max(0, x));
+  }
+
+  function angleAtB(a, b, c) {
+    const abx = a.x - b.x;
+    const aby = a.y - b.y;
+    const cbx = c.x - b.x;
+    const cby = c.y - b.y;
+    const dot = abx * cbx + aby * cby;
+    const m = Math.sqrt(abx * abx + aby * aby) * Math.sqrt(cbx * cbx + cby * cby);
+    if (m < 1e-9) return Math.PI;
+    return Math.acos(Math.min(1, Math.max(-1, dot / m)));
+  }
+
+  function fingerCurvatureAvg(lm) {
+    if (!lm || !lm[20]) return cal.curvatureBaseline;
+    const angles = [
+      angleAtB(lm[5], lm[6], lm[8]),
+      angleAtB(lm[9], lm[10], lm[12]),
+      angleAtB(lm[13], lm[14], lm[16]),
+      angleAtB(lm[17], lm[18], lm[20])
+    ];
+    let s = 0;
+    for (let i = 0; i < angles.length; i++) s += angles[i];
+    const avg = s / angles.length;
+    return Number.isFinite(avg) ? avg : cal.curvatureBaseline;
+  }
+
+  function stdDevRing(buf) {
+    const n = buf.length;
+    if (n < 2) return 0;
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += buf[i];
+    mean /= n;
+    let v = 0;
+    for (let i = 0; i < n; i++) {
+      const d = buf[i] - mean;
+      v += d * d;
+    }
+    return Math.sqrt(v / n);
   }
 
   const NOTE_FREQ = {
@@ -346,12 +556,8 @@
     ])
   };
 
-  /** Fixed X (~67% from left on mirrored canvas) — separation from player’s hand */
-  const GHOST_X_NORM = 0.33;
   const LEARN_ALIGN_THRESH = 0.05;
-  /** ghostY = ghostY * 0.9 + targetY * 0.1 — never jump */
   const GHOST_SMOOTH = 0.1;
-  /** Slightly long ramp so notes overlap and feel “leading” */
   const GUIDE_FREQ_RAMP_S = 0.16;
 
   function snapToScale(freq, scaleArr) {
@@ -382,10 +588,7 @@
     return idx;
   }
 
-  // Hand openness: avg distance palm (0) → fingertips [4,8,12,16,20], normalized by calibration.
   const FINGERTIP_IDS = [4, 8, 12, 16, 20];
-  const OPEN_DIST_MIN = 0.05;
-  const OPEN_DIST_MAX = 0.25;
 
   function euclid2d(a, b) {
     const dx = a.x - b.x;
@@ -393,26 +596,16 @@
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  /** @param {Array<{x:number,y:number,z?:number}>} landmarks */
-  function handOpennessNormalized(landmarks) {
-    if (!landmarks || !landmarks[20]) return 0;
-    const palm = landmarks[0];
-    let sum = 0;
-    for (let i = 0; i < FINGERTIP_IDS.length; i++) {
-      sum += euclid2d(palm, landmarks[FINGERTIP_IDS[i]]);
-    }
-    const avg = sum / FINGERTIP_IDS.length;
-    if (!Number.isFinite(avg)) return 0;
-    const t = (avg - OPEN_DIST_MIN) / (OPEN_DIST_MAX - OPEN_DIST_MIN);
-    return Math.min(1, Math.max(0, t));
+  function pinchOpennessRaw(lm) {
+    if (!lm || !lm[8]) return 0;
+    return euclid2d(lm[4], lm[8]);
   }
 
-  // Expression: base pitch + (smoothOpen * 100) Hz; vibrato = sin(t*10) * smoothOpen * 20.
-  const OPEN_PITCH_HZ = 100;
-  const VIBRATO_RATE = 10;
-  const VIBRATO_DEPTH_MAX = 20;
+  function spreadIndexPinkyRaw(lm) {
+    if (!lm || !lm[20]) return 0;
+    return euclid2d(lm[8], lm[20]);
+  }
 
-  // Dead zone + velocity-based alpha: smooth = prev*(1-a) + cur*a; a = 0.3 if fast else 0.05
   const DEAD_ZONE = 0.005;
   const VELOCITY_THRESH = 0.02;
   const ALPHA_FAST = 0.3;
@@ -432,34 +625,53 @@
     return Number.isFinite(out) ? Math.min(1, Math.max(0, out)) : smooth;
   }
 
-  /** @type {AudioContext | null} */
-  let audioCtx = null;
-  /** @type {OscillatorNode | null} */
-  let osc = null;
-  /** @type {GainNode | null} */
-  let gainNode = null;
+  /** @type {Tone.Synth | null} */
+  let synth = null;
+  /** @type {Tone.Filter | null} */
+  let filterNode = null;
+  /** @type {Tone.Gain | null} */
+  let mainGain = null;
+  /** @type {Tone.Oscillator | null} */
+  let guideOsc = null;
+  /** @type {Tone.Gain | null} */
+  let guideGain = null;
   let audioRunning = false;
 
-  let prevRawPitchY = 0.5;
+  let rawPitchHz = 550;
+  let smoothPitchHz = 550;
+  let smoothPitchNormX = 0.5;
+  let prevRawPitchX = 0.5;
   let prevRawVolY = 0.5;
   let prevRawOpen = 0;
-  let smoothPitchY = 0.5;
   let smoothVolY = 0.5;
   let smoothVol = 0;
   let smoothOpen = 0;
+  let smoothSpread = 0;
+  let smoothCurvature = 0;
+  let prevRawSpread = 0.5;
+  let prevRawCurve = 2.0;
   let lastHandCount = 0;
+
+  let pitchJitterBuf = [];
+  let prevAnchorX = 0.5;
+  let prevAnchorY = 0.5;
+  let prevTips = null;
+  /** Latest pitch-hand landmarks for calibration capture */
+  let lastPitchLandmarks = null;
+  let lastFrameTime = 0;
+  let handVelocity = 0;
+  let transitionCooldown = 0;
+
+  let displayMode = 'NEUTRAL';
+  let displayIntent = '—';
 
   let learnModeActive = false;
   /** @type {{ notes: Array<{note:string,duration:number}>, totalMs: number } | null} */
   let currentSong = null;
   let songStartTime = 0;
-  let ghostY = 0.5;
-  let learnTargetY = 0.5;
+  let ghostX = 0.5;
+  let learnTargetX = 0.5;
   let lastLearnSegmentStartMs = -1;
-  /** @type {OscillatorNode | null} */
-  let guideOsc = null;
-  /** @type {GainNode | null} */
-  let guideGain = null;
 
   const video = document.getElementById('video');
   const canvas = document.getElementById('overlay');
@@ -472,8 +684,18 @@
   const volLine = document.getElementById('volLine');
   const handLine = document.getElementById('handLine');
   const openLine = document.getElementById('openLine');
+  const modeLine = document.getElementById('modeLine');
+  const intentLine = document.getElementById('intentLine');
+  const featureLine = document.getElementById('featureLine');
   const btnLearn = document.getElementById('btnLearn');
   const learnPanel = document.getElementById('learn-panel');
+  const calOverlay = document.getElementById('calibration-overlay');
+  const calInstruction = document.getElementById('cal-instruction');
+  const calCapture = document.getElementById('cal-capture');
+  const calSkip = document.getElementById('cal-skip');
+  const btnRecalibrate = document.getElementById('btnRecalibrate');
+  const pitchMarkYou = document.getElementById('pitchMarkYou');
+  const pitchMarkGhost = document.getElementById('pitchMarkGhost');
 
   function resizeCanvas() {
     const w = video.videoWidth || window.innerWidth;
@@ -493,13 +715,13 @@
     if (guideOsc) {
       try {
         guideOsc.stop();
-        guideOsc.disconnect();
+        guideOsc.dispose();
       } catch (_) {}
       guideOsc = null;
     }
     if (guideGain) {
       try {
-        guideGain.disconnect();
+        guideGain.dispose();
       } catch (_) {}
       guideGain = null;
     }
@@ -510,24 +732,21 @@
     currentSong = null;
     lastLearnSegmentStartMs = -1;
     stopGuideAudio();
+    if (pitchMarkGhost) pitchMarkGhost.classList.add('hidden');
     if (btnLearn) btnLearn.classList.remove('learn-active');
     if (learnPanel) learnPanel.classList.add('hidden');
   }
 
   function ensureGuideAudio() {
-    if (!audioCtx || !audioRunning || guideOsc) return;
-    guideOsc = audioCtx.createOscillator();
-    guideGain = audioCtx.createGain();
-    guideGain.gain.value = 0;
-    guideOsc.type = 'sine';
-    guideOsc.connect(guideGain);
-    guideGain.connect(audioCtx.destination);
+    if (!audioRunning || guideOsc) return;
+    guideGain = new Tone.Gain(0).toDestination();
+    guideOsc = new Tone.Oscillator(440, 'sine').connect(guideGain);
     guideOsc.start();
   }
 
   function getCurrentLearnSegment() {
-    if (!currentSong || !audioCtx) return null;
-    const elapsedMs = (audioCtx.currentTime - songStartTime) * 1000;
+    if (!currentSong) return null;
+    const elapsedMs = (Tone.now() - songStartTime) * 1000;
     const total = currentSong.totalMs;
     const t = ((elapsedMs % total) + total) % total;
     let acc = 0;
@@ -543,20 +762,19 @@
   }
 
   function updateLearnPlayback() {
-    if (!learnModeActive || !currentSong || !audioCtx) return;
+    if (!learnModeActive || !currentSong) return;
     const seg = getCurrentLearnSegment();
     if (!seg) return;
-    learnTargetY = freqToGhostY(seg.freq);
-    ghostY = ghostY * (1 - GHOST_SMOOTH) + learnTargetY * GHOST_SMOOTH;
+    learnTargetX = normXFromHz(seg.freq);
+    ghostX = ghostX * (1 - GHOST_SMOOTH) + learnTargetX * GHOST_SMOOTH;
+    if (pitchMarkGhost) {
+      pitchMarkGhost.classList.remove('hidden');
+      pitchMarkGhost.style.left = (ghostX * 100).toFixed(2) + '%';
+    }
     if (guideOsc && guideGain && seg.startMs !== lastLearnSegmentStartMs) {
       lastLearnSegmentStartMs = seg.startMs;
-      const now = audioCtx.currentTime;
-      guideOsc.frequency.cancelScheduledValues(now);
-      guideOsc.frequency.setValueAtTime(guideOsc.frequency.value, now);
-      guideOsc.frequency.linearRampToValueAtTime(seg.freq, now + GUIDE_FREQ_RAMP_S);
-      guideGain.gain.cancelScheduledValues(now);
-      guideGain.gain.setValueAtTime(guideGain.gain.value, now);
-      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
+      guideOsc.frequency.rampTo(seg.freq, GUIDE_FREQ_RAMP_S);
+      guideGain.gain.rampTo(0.11, 0.06);
     }
   }
 
@@ -565,18 +783,20 @@
     lastLearnSegmentStartMs = -1;
     learnModeActive = true;
     currentSong = song;
-    songStartTime = audioCtx.currentTime;
+    songStartTime = Tone.now();
     const first = NOTE_FREQ[song.notes[0].note];
-    ghostY = freqToGhostY(first);
-    learnTargetY = ghostY;
+    ghostX = normXFromHz(first);
+    learnTargetX = ghostX;
     ensureGuideAudio();
     if (btnLearn) btnLearn.classList.add('learn-active');
     if (guideOsc && guideGain) {
-      const now = audioCtx.currentTime;
-      guideOsc.frequency.setValueAtTime(first, now);
-      guideGain.gain.cancelScheduledValues(now);
-      guideGain.gain.setValueAtTime(0, now);
-      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
+      guideOsc.frequency.value = first;
+      guideGain.gain.value = 0;
+      guideGain.gain.rampTo(0.11, 0.08);
+    }
+    if (pitchMarkGhost) {
+      pitchMarkGhost.classList.remove('hidden');
+      pitchMarkGhost.style.left = (ghostX * 100).toFixed(2) + '%';
     }
     lastLearnSegmentStartMs = 0;
   }
@@ -587,52 +807,48 @@
     if (!audioRunning) {
       await startAudio();
     }
-    if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') {
-      try {
-        await audioCtx.resume();
-      } catch (_) {}
-    }
+    if (!synth) return;
+    await Tone.start();
     launchLearn(song);
   }
 
-  // Audio setup: one oscillator into a gain node; no sound until Start (unlocks AudioContext).
-  // Resume the context before osc.start() — some Safari/iOS builds stay silent if started while suspended.
   async function startAudio() {
     if (audioRunning) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    gainNode = audioCtx.createGain();
-    gainNode.gain.value = 0;
-    osc = audioCtx.createOscillator();
-    osc.type = waveTypeEl.value;
-    const cont0 = continuousFreqFromY(smoothPitchY);
-    const center0 = cont0 + smoothOpen * OPEN_PITCH_HZ;
-    osc.frequency.value = scaleLockEl.checked ? snapToScale(center0, scale) : center0;
-    osc.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    if (audioCtx.state === 'suspended') {
+    await Tone.start();
+    if (Tone.context.state !== 'running') {
       try {
-        await audioCtx.resume();
+        await Tone.context.resume();
       } catch (_) {}
     }
-    osc.start();
+    synth = new Tone.Synth({
+      oscillator: { type: waveTypeEl.value },
+      envelope: { attack: 0.08, decay: 0.25, sustain: 1, release: 0.65 }
+    });
+    filterNode = new Tone.Filter(1800, 'lowpass');
+    mainGain = new Tone.Gain(0).toDestination();
+    synth.connect(filterNode);
+    filterNode.connect(mainGain);
+    const startHz = Math.max(PITCH_MIN, Math.min(PITCH_MAX, smoothPitchHz));
+    synth.triggerAttack(startHz);
     audioRunning = true;
     btnStart.disabled = true;
     btnStop.disabled = false;
   }
 
   function stopAudio() {
-    if (!audioRunning || !osc || !audioCtx) return;
+    if (!audioRunning || !synth) return;
     exitLearnMode();
     try {
-      osc.stop();
-      osc.disconnect();
+      synth.triggerRelease();
     } catch (_) {}
-    if (gainNode) gainNode.disconnect();
-    audioCtx.close().catch(function () {});
-    audioCtx = null;
-    osc = null;
-    gainNode = null;
+    try {
+      synth.dispose();
+      filterNode.dispose();
+      mainGain.dispose();
+    } catch (_) {}
+    synth = null;
+    filterNode = null;
+    mainGain = null;
     audioRunning = false;
     lastHandCount = 0;
     btnStart.disabled = false;
@@ -640,15 +856,17 @@
   }
 
   waveTypeEl.addEventListener('change', function () {
-    if (osc) osc.type = waveTypeEl.value;
+    if (synth && synth.oscillator) {
+      synth.oscillator.type = waveTypeEl.value;
+    }
   });
 
   btnStart.addEventListener('click', startAudio);
   btnStop.addEventListener('click', stopAudio);
 
   function ensureAudioRunning() {
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(function () {});
+    if (typeof Tone !== 'undefined' && Tone.context && Tone.context.state === 'suspended') {
+      Tone.start().catch(function () {});
     }
   }
   document.addEventListener('click', ensureAudioRunning, true);
@@ -672,16 +890,53 @@
   });
 
   /**
-   * Maps REAL hand landmarks only (ghostY / learnTargetY / learnMode must never affect this path).
-   * Learn mode adds visuals + guide oscillator after this runs in onResults.
+   * REAL landmarks only → features → intent → Tone mapping (never ghost/learn).
    */
   function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks) {
     const scaleLock = scaleLockEl.checked;
+    const nowMs = performance.now();
+    const dt = lastFrameTime > 0 ? Math.max(0.005, (nowMs - lastFrameTime) / 1000) : 0.033;
+    lastFrameTime = nowMs;
+
+    let jitter = 0;
 
     if (pitchHandLandmarks) {
-      const currPitchY = avgStableY(pitchHandLandmarks);
-      smoothPitchY = adaptiveSmooth(prevRawPitchY, currPitchY, smoothPitchY);
-      prevRawPitchY = currPitchY;
+      const ax = pitchHandLandmarks[INDEX_TIP].x;
+      const ay = pitchHandLandmarks[INDEX_TIP].y;
+      rawPitchHz = hzFromPitchX(ax);
+      smoothPitchNormX = adaptiveSmooth(prevRawPitchX, ax, smoothPitchNormX);
+      prevRawPitchX = ax;
+
+      pitchJitterBuf.push(ax);
+      if (pitchJitterBuf.length > JITTER_RING) pitchJitterBuf.shift();
+      jitter = pitchJitterBuf.length >= 3 ? stdDevRing(pitchJitterBuf) : 0;
+
+      const dist = Math.hypot(ax - prevAnchorX, ay - prevAnchorY);
+      handVelocity = dist / (dt + 1e-6);
+      prevAnchorX = ax;
+      prevAnchorY = ay;
+
+      const pinchR = pinchOpennessRaw(pitchHandLandmarks);
+      const spreadR = spreadIndexPinkyRaw(pitchHandLandmarks);
+      const nOpen = norm01(pinchR, cal.openMin, cal.openMax);
+      const nSpreadRaw = norm01(spreadR, cal.spreadMin, cal.spreadMax);
+      smoothOpen = adaptiveSmooth(prevRawOpen, nOpen, smoothOpen);
+      prevRawOpen = nOpen;
+      smoothSpread = adaptiveSmooth(prevRawSpread, nSpreadRaw, smoothSpread);
+      prevRawSpread = nSpreadRaw;
+
+      const curRaw = fingerCurvatureAvg(pitchHandLandmarks);
+      smoothCurvature = adaptiveSmooth(prevRawCurve, curRaw, smoothCurvature);
+      prevRawCurve = curRaw;
+
+      prevTips = FINGERTIP_IDS.map(function (id) {
+        return { x: pitchHandLandmarks[id].x, y: pitchHandLandmarks[id].y };
+      });
+    } else {
+      pitchJitterBuf.length = 0;
+      smoothOpen = adaptiveSmooth(prevRawOpen, 0, smoothOpen);
+      prevRawOpen = 0;
+      prevTips = null;
     }
 
     if (handCount >= 2 && volHandLandmarks) {
@@ -699,61 +954,94 @@
       smoothVol = yToRawVolume(smoothVolY);
     }
 
+    const stab = pitchHandLandmarks
+      ? 1 / (jitter * 18 + handVelocity * 0.28 + 0.02)
+      : 0;
+
+    let mode = 'NEUTRAL';
+    if (smoothOpen < 0.2) mode = 'PRECISION';
+    else if (smoothSpread > 0.68) mode = 'EXPRESSIVE';
+    else if (smoothCurvature > cal.curvatureBaseline + 0.35) mode = 'VIBRATO_READY';
+    displayMode = mode;
+
+    let intent = 'EXPLORE';
+    if (stab > HOLD_STAB_THRESH && handVelocity < HOLD_VEL_THRESH) intent = 'HOLD_NOTE';
+    else if (handVelocity > TRANS_VEL_LOW && handVelocity < TRANS_VEL_HIGH) {
+      intent = 'TRANSITION';
+      transitionCooldown = 14;
+    } else if (jitter > 0.007 && stab < 5) intent = 'VIBRATO';
+    else if (handVelocity > VEL_FAST) intent = 'ATTACK';
+    displayIntent = intent;
+
+    if (transitionCooldown > 0) transitionCooldown--;
+
+    let alpha = PITCH_LERP_BASE;
+    if (intent === 'HOLD_NOTE') alpha *= 0.42;
+    if (mode === 'PRECISION') alpha *= 0.62;
+    if (stab > 1.2) alpha *= 0.72 / Math.min(stab, 4);
     if (pitchHandLandmarks) {
-      const currOpen = handOpennessNormalized(pitchHandLandmarks);
-      smoothOpen = adaptiveSmooth(prevRawOpen, currOpen, smoothOpen);
-      prevRawOpen = currOpen;
-    } else {
-      smoothOpen = adaptiveSmooth(prevRawOpen, 0, smoothOpen);
-      prevRawOpen = 0;
+      smoothPitchHz = lerp(smoothPitchHz, rawPitchHz, alpha);
     }
 
-    const continuousHz = continuousFreqFromY(smoothPitchY);
-    const centerHz = continuousHz + smoothOpen * OPEN_PITCH_HZ;
-    let targetPitchHz = scaleLock ? snapToScale(centerHz, scale) : centerHz;
-    if (!Number.isFinite(targetPitchHz)) targetPitchHz = PITCH_MIN;
+    const microRange = mode === 'EXPRESSIVE' ? 58 : MICRO_TUNE_HZ;
+    let micro = (smoothOpen - 0.5) * microRange * 2;
+    if (mode === 'PRECISION') micro *= 0.45;
+
+    let baseHz = smoothPitchHz + micro;
+    if (scaleLock && intent !== 'TRANSITION') {
+      baseHz = snapToScale(baseHz, scale);
+    }
+
+    const vibAmt = jitter * (mode === 'VIBRATO_READY' || intent === 'VIBRATO' ? 220 : 85);
+    const phase = nowMs * 0.001 * VIBRATO_SPEED * Math.PI * 2;
+    let outHz = baseHz + Math.sin(phase) * vibAmt;
+    if (!Number.isFinite(outHz)) outHz = PITCH_MIN;
+
+    const normCurve = norm01(smoothCurvature, cal.curvatureBaseline - 0.2, cal.curvatureBaseline + 0.85);
+    const curveDamp = 1 - normCurve * CURVE_DAMP;
+
     freqLine.textContent =
-      'Frequency: ' +
-      targetPitchHz.toFixed(2) +
-      ' Hz' +
-      (scaleLock ? ' (C major)' : ' (continuous)');
+      'Frequency: ' + outHz.toFixed(2) + ' Hz' + (scaleLock ? ' (C major)' : ' (continuous)');
     volLine.textContent = 'Volume: ' + smoothVol.toFixed(3);
-    openLine.textContent = 'Open: ' + smoothOpen.toFixed(2);
+    openLine.textContent =
+      'Pinch/spread: ' + smoothOpen.toFixed(2) + ' / ' + smoothSpread.toFixed(2) + ' · curve ' + smoothCurvature.toFixed(2);
+    modeLine.textContent = 'Mode: ' + mode;
+    intentLine.textContent = 'Intent: ' + intent;
+    featureLine.textContent =
+      'Stability ' + stab.toFixed(2) + ' · jitter ' + jitter.toFixed(4) + ' · vel ' + handVelocity.toFixed(3);
+
+    if (pitchMarkYou) pitchMarkYou.style.left = (smoothPitchNormX * 100).toFixed(2) + '%';
 
     const hadHands = lastHandCount > 0;
     const handsLost = handCount === 0 && hadHands;
     lastHandCount = handCount;
 
-    if (!audioRunning || !audioCtx || !osc || !gainNode) return;
+    if (!audioRunning || !synth || !filterNode || !mainGain) return;
 
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(function () {});
+    if (Tone.context.state === 'suspended') {
+      Tone.context.resume().catch(function () {});
     }
 
     const volClamped = Number.isFinite(smoothVol) ? Math.min(1, Math.max(0, smoothVol)) : 0;
-    // With two hands, volume is the second hand’s height; if that hand sits low, gain → 0 (silent).
-    // Floor keeps the theremin audible while still allowing the volume hand to go quiet near the bottom.
-    const gainVol = handCount >= 2 ? Math.max(0.14, volClamped) : volClamped;
+    let gainVol = handCount >= 2 ? Math.max(0.14, volClamped) : volClamped;
+    gainVol *= curveDamp;
 
-    const now = audioCtx.currentTime;
-    const vibrato = Math.sin(now * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
-    let finalHz = targetPitchHz + vibrato;
-    if (!Number.isFinite(finalHz)) finalHz = targetPitchHz;
-    const pitchRampS = scaleLock ? AUDIO_RAMP_PITCH_SNAP_S : AUDIO_RAMP_S;
+    const fLo = mode === 'EXPRESSIVE' ? FILTER_MIN : FILTER_MIN + 200;
+    const fHi = mode === 'EXPRESSIVE' ? FILTER_MAX : FILTER_MAX - 600;
+    const fTarget = lerp(fLo, fHi, smoothSpread);
+    filterNode.frequency.rampTo(fTarget, 0.05);
+
+    synth.envelope.attack = handVelocity > VEL_FAST ? 0.01 : 0.2;
+
+    const rampT = intent === 'ATTACK' || handVelocity > VEL_FAST ? GAIN_RAMP_FAST : GAIN_RAMP_SLOW;
 
     if (handsLost) {
-      gainNode.gain.cancelScheduledValues(now);
-      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-      gainNode.gain.linearRampToValueAtTime(0, now + GAIN_FADE_OUT_S);
+      mainGain.gain.rampTo(0, GAIN_FADE_OUT_S);
     } else if (handCount > 0) {
-      gainNode.gain.cancelScheduledValues(now);
-      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-      gainNode.gain.linearRampToValueAtTime(gainVol, now + AUDIO_RAMP_S);
+      mainGain.gain.rampTo(gainVol, rampT);
     }
 
-    osc.frequency.cancelScheduledValues(now);
-    osc.frequency.setValueAtTime(osc.frequency.value, now);
-    osc.frequency.linearRampToValueAtTime(finalHz, now + pitchRampS);
+    synth.frequency.rampTo(outHz, AUDIO_RAMP_PITCH_SNAP_S);
   }
 
   function drawFingerDotAt(lm8, glowInner, glowMid, core) {
@@ -798,12 +1086,12 @@
     return { x: (1 - lm.x) * w, y: lm.y * h };
   }
 
-  /** Minimal guide: palm hint (outline) + fingertip; muted white, no skeleton */
+  /** Ghost target follows horizontal pitch (learnTargetX / ghostX); vertical band fixed for visibility */
   function drawGhostHand(aligned) {
     const w = canvas.width;
     const h = canvas.height;
-    const px = (1 - GHOST_X_NORM) * w;
-    const py = ghostY * h;
+    const px = (1 - ghostX) * w;
+    const py = 0.42 * h;
     const base = 0.24;
     const opacity = aligned ? 0.29 : base;
     const tint = aligned ? [188, 228, 205] : [232, 234, 240];
@@ -872,7 +1160,7 @@
       drawGhostHand(learnAligned);
     }
 
-    if (list && handCount > 0 && order.length && !learnModeActive) {
+    if (list && handCount > 0 && order.length) {
       drawHandMesh(list[order[0]], MESH_PALETTE_PITCH);
       if (handCount >= 2) {
         drawHandMesh(list[order[1]], MESH_PALETTE_VOL);
@@ -932,13 +1220,21 @@
       if (debugFrameCounter % 45 === 0) {
         console.log('HAND:', { handCount, hasPitch: !!pitchHandLandmarks, hasVol: !!volHandLandmarks });
         console.log('FEATURES:', {
-          smoothPitchY: Number(smoothPitchY).toFixed(4),
+          pitchNormX: Number(smoothPitchNormX).toFixed(4),
           smoothVol: Number(smoothVol).toFixed(4),
-          smoothOpen: Number(smoothOpen).toFixed(4)
+          mode: displayMode,
+          intent: displayIntent
         });
-        console.log('AUDIO STATE:', audioCtx ? audioCtx.state : 'no-context', 'audioRunning:', audioRunning);
+        console.log(
+          'AUDIO',
+          typeof Tone !== 'undefined' && Tone.context ? Tone.context.state : 'no-tone',
+          'audioRunning:',
+          audioRunning
+        );
       }
     }
+
+    lastPitchLandmarks = pitchHandLandmarks;
 
     if (learnModeActive && currentSong) {
       updateLearnPlayback();
@@ -947,9 +1243,81 @@
       !!(learnModeActive &&
         currentSong &&
         pitchHandLandmarks &&
-        Math.abs(smoothPitchY - learnTargetY) < LEARN_ALIGN_THRESH);
+        Math.abs(smoothPitchNormX - learnTargetX) < LEARN_ALIGN_THRESH);
     drawFingerDots(pitchLm8, volLm8, handCount, list, order, learnAligned);
   }
+
+  let calStep = 0;
+
+  function setCalInstruction() {
+    const texts = [
+      'Step 1/3: Open your pitch hand wide (spread index and pinky), then tap Capture.',
+      'Step 2/3: Pinch thumb and index together, then Capture.',
+      'Step 3/3: Relax your hand to a neutral curve, then Capture.'
+    ];
+    calInstruction.textContent = texts[calStep] || '';
+  }
+
+  function finishCalibration() {
+    try {
+      localStorage.setItem('thereminCalDone', '1');
+      saveCalToStorage();
+    } catch (_) {}
+    calOverlay.classList.add('hidden');
+    btnStart.disabled = false;
+  }
+
+  function openCalibration() {
+    calStep = 0;
+    setCalInstruction();
+    calOverlay.classList.remove('hidden');
+    btnStart.disabled = true;
+  }
+
+  loadCalFromStorage();
+
+  function maybeShowCalibrationOnLoad() {
+    try {
+      if (localStorage.getItem('thereminCalDone') === '1') {
+        calOverlay.classList.add('hidden');
+        btnStart.disabled = false;
+        return;
+      }
+    } catch (_) {}
+    openCalibration();
+  }
+
+  calCapture.addEventListener('click', function () {
+    const lm = lastPitchLandmarks;
+    if (!lm || !lm[8]) {
+      calInstruction.textContent = 'Show your pitch hand in view, then Capture again.';
+      return;
+    }
+    if (calStep === 0) {
+      cal.spreadMax = Math.max(cal.spreadMin + 0.04, spreadIndexPinkyRaw(lm));
+      cal.openMax = Math.max(cal.openMin + 0.02, pinchOpennessRaw(lm));
+      calStep = 1;
+      setCalInstruction();
+    } else if (calStep === 1) {
+      cal.openMin = Math.max(0.01, Math.min(pinchOpennessRaw(lm), cal.openMax - 0.02));
+      cal.spreadMin = Math.max(0.01, Math.min(spreadIndexPinkyRaw(lm), cal.spreadMax - 0.03));
+      calStep = 2;
+      setCalInstruction();
+    } else {
+      cal.curvatureBaseline = fingerCurvatureAvg(lm);
+      finishCalibration();
+    }
+  });
+
+  calSkip.addEventListener('click', function () {
+    finishCalibration();
+  });
+
+  btnRecalibrate.addEventListener('click', function () {
+    openCalibration();
+  });
+
+  maybeShowCalibrationOnLoad();
 
   const hands = new Hands({
     locateFile: function (file) {
