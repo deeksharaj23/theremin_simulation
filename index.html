@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Web Theremin</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23141420' stroke='%23446688' stroke-width='1'/%3E%3C/svg%3E" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -539,44 +540,44 @@
     }
   }
 
-  function startLearnSong(songId) {
+  function launchLearn(song) {
+    stopGuideAudio();
+    lastLearnSegmentStartMs = -1;
+    learnModeActive = true;
+    currentSong = song;
+    songStartTime = audioCtx.currentTime;
+    const first = NOTE_FREQ[song.notes[0].note];
+    ghostY = freqToGhostY(first);
+    learnTargetY = ghostY;
+    ensureGuideAudio();
+    if (btnLearn) btnLearn.classList.add('learn-active');
+    if (guideOsc && guideGain) {
+      const now = audioCtx.currentTime;
+      guideOsc.frequency.setValueAtTime(first, now);
+      guideGain.gain.cancelScheduledValues(now);
+      guideGain.gain.setValueAtTime(0, now);
+      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
+    }
+    lastLearnSegmentStartMs = 0;
+  }
+
+  async function startLearnSong(songId) {
     const song = SONGS[songId];
     if (!song) return;
     if (!audioRunning) {
-      startAudio();
+      await startAudio();
     }
     if (!audioCtx) return;
-
-    function launchLearn() {
-      stopGuideAudio();
-      lastLearnSegmentStartMs = -1;
-      learnModeActive = true;
-      currentSong = song;
-      songStartTime = audioCtx.currentTime;
-      const first = NOTE_FREQ[song.notes[0].note];
-      ghostY = freqToGhostY(first);
-      learnTargetY = ghostY;
-      ensureGuideAudio();
-      if (btnLearn) btnLearn.classList.add('learn-active');
-      if (guideOsc && guideGain) {
-        const now = audioCtx.currentTime;
-        guideOsc.frequency.setValueAtTime(first, now);
-        guideGain.gain.cancelScheduledValues(now);
-        guideGain.gain.setValueAtTime(0, now);
-        guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
-      }
-      lastLearnSegmentStartMs = 0;
-    }
-
     if (audioCtx.state === 'suspended') {
-      audioCtx.resume().then(launchLearn).catch(launchLearn);
-    } else {
-      launchLearn();
+      try {
+        await audioCtx.resume();
+      } catch (_) {}
     }
+    launchLearn(song);
   }
 
   // Audio setup: one oscillator into a gain node; no sound until Start (unlocks AudioContext).
-  function startAudio() {
+  async function startAudio() {
     if (audioRunning) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     gainNode = audioCtx.createGain();
@@ -589,10 +590,12 @@
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
     osc.start();
-    audioRunning = true;
     if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(function () {});
+      try {
+        await audioCtx.resume();
+      } catch (_) {}
     }
+    audioRunning = true;
     btnStart.disabled = true;
     btnStop.disabled = false;
   }
@@ -622,6 +625,14 @@
   btnStart.addEventListener('click', startAudio);
   btnStop.addEventListener('click', stopAudio);
 
+  function ensureAudioRunning() {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
+    }
+  }
+  document.addEventListener('click', ensureAudioRunning, true);
+  document.addEventListener('touchstart', ensureAudioRunning, { passive: true, capture: true });
+
   btnLearn.addEventListener('click', function () {
     if (learnModeActive) {
       exitLearnMode();
@@ -633,8 +644,9 @@
   document.querySelectorAll('.learn-song').forEach(function (el) {
     el.addEventListener('click', function () {
       const id = el.getAttribute('data-song');
-      startLearnSong(id);
-      learnPanel.classList.add('hidden');
+      startLearnSong(id).then(function () {
+        learnPanel.classList.add('hidden');
+      }).catch(function () {});
     });
   });
 
