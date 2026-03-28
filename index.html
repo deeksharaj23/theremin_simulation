@@ -161,7 +161,9 @@
       position: absolute;
       left: 1rem;
       bottom: 1rem;
-      z-index: 3;
+      z-index: 100;
+      pointer-events: auto;
+      isolation: isolate;
       display: flex;
       flex-direction: column-reverse;
       gap: 0.4rem;
@@ -169,6 +171,7 @@
       max-width: min(100% - 2rem, 14rem);
     }
     #btnLearn {
+      touch-action: manipulation;
       pointer-events: auto;
       padding: 0.45rem 0.75rem;
       font-size: 0.8rem;
@@ -201,6 +204,7 @@
       display: none;
     }
     .learn-panel button {
+      touch-action: manipulation;
       text-align: left;
       padding: 0.4rem 0.55rem;
       font-size: 0.8rem;
@@ -514,7 +518,7 @@
       }
       acc += n.duration;
     }
-    return null;
+    return { note: notes[0], startMs: 0, freq: NOTE_FREQ[notes[0].note] };
   }
 
   function updateLearnPlayback() {
@@ -542,24 +546,33 @@
       startAudio();
     }
     if (!audioCtx) return;
-    stopGuideAudio();
-    lastLearnSegmentStartMs = -1;
-    learnModeActive = true;
-    currentSong = song;
-    songStartTime = audioCtx.currentTime;
-    const first = NOTE_FREQ[song.notes[0].note];
-    ghostY = freqToGhostY(first);
-    learnTargetY = ghostY;
-    ensureGuideAudio();
-    if (btnLearn) btnLearn.classList.add('learn-active');
-    if (guideOsc && guideGain) {
-      const now = audioCtx.currentTime;
-      guideOsc.frequency.setValueAtTime(first, now);
-      guideGain.gain.cancelScheduledValues(now);
-      guideGain.gain.setValueAtTime(0, now);
-      guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
+
+    function launchLearn() {
+      stopGuideAudio();
+      lastLearnSegmentStartMs = -1;
+      learnModeActive = true;
+      currentSong = song;
+      songStartTime = audioCtx.currentTime;
+      const first = NOTE_FREQ[song.notes[0].note];
+      ghostY = freqToGhostY(first);
+      learnTargetY = ghostY;
+      ensureGuideAudio();
+      if (btnLearn) btnLearn.classList.add('learn-active');
+      if (guideOsc && guideGain) {
+        const now = audioCtx.currentTime;
+        guideOsc.frequency.setValueAtTime(first, now);
+        guideGain.gain.cancelScheduledValues(now);
+        guideGain.gain.setValueAtTime(0, now);
+        guideGain.gain.linearRampToValueAtTime(0.11, now + 0.06);
+      }
+      lastLearnSegmentStartMs = 0;
     }
-    lastLearnSegmentStartMs = 0;
+
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(launchLearn).catch(launchLearn);
+    } else {
+      launchLearn();
+    }
   }
 
   // Audio setup: one oscillator into a gain node; no sound until Start (unlocks AudioContext).
@@ -576,8 +589,10 @@
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
     osc.start();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
     audioRunning = true;
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
+    }
     btnStart.disabled = true;
     btnStop.disabled = false;
   }
@@ -809,7 +824,7 @@
       drawGhostHand(learnAligned);
     }
 
-    if (audioRunning && list && handCount > 0 && order.length && !learnModeActive) {
+    if (list && handCount > 0 && order.length && !learnModeActive) {
       drawHandMesh(list[order[0]], MESH_PALETTE_PITCH);
       if (handCount >= 2) {
         drawHandMesh(list[order[1]], MESH_PALETTE_VOL);
