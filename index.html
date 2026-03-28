@@ -118,6 +118,7 @@
       <div id="freqLine">Frequency: — Hz</div>
       <div id="volLine">Volume: —</div>
       <div id="handLine">Hand: —</div>
+      <div id="openLine">Open: —</div>
     </div>
     <p id="hint">Two hands: right = pitch (green) · left = volume (blue) · one hand = pitch only</p>
     <div id="controls">
@@ -146,8 +147,9 @@
    * Two-hand theremin (mirrored video): wrist x sorts hands — smaller raw x = further right on screen.
    * - Rightmost hand → pitch (landmark 8 y → 200–1200 Hz or C-major).
    * - Leftmost hand → volume (landmark 8 y, inverted: higher hand = louder).
+   * - Pitch hand openness (palm→fingertip distances) → +Hz offset + vibrato depth.
    * - One hand only → pitch from that hand; volume target fixed at 0.5.
-   * Smoothing: pitch and volume each use smooth = prev*0.8 + current*0.2.
+   * Smoothing: pitch, volume, openness each use smooth = prev*0.8 + current*0.2.
    * Audio: OscillatorNode + GainNode; start only after "Start".
    */
 
@@ -187,6 +189,34 @@
     return idx;
   }
 
+  // Hand openness: avg distance palm (0) → fingertips [4,8,12,16,20], normalized by calibration.
+  const FINGERTIP_IDS = [4, 8, 12, 16, 20];
+  const OPEN_DIST_MIN = 0.05;
+  const OPEN_DIST_MAX = 0.25;
+
+  function euclid2d(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /** @param {Array<{x:number,y:number,z?:number}>} landmarks */
+  function handOpennessNormalized(landmarks) {
+    const palm = landmarks[0];
+    let sum = 0;
+    for (let i = 0; i < FINGERTIP_IDS.length; i++) {
+      sum += euclid2d(palm, landmarks[FINGERTIP_IDS[i]]);
+    }
+    const avg = sum / FINGERTIP_IDS.length;
+    const t = (avg - OPEN_DIST_MIN) / (OPEN_DIST_MAX - OPEN_DIST_MIN);
+    return Math.min(1, Math.max(0, t));
+  }
+
+  // Expression: base pitch + (smoothOpen * 100) Hz; vibrato = sin(t*10) * smoothOpen * 20.
+  const OPEN_PITCH_HZ = 100;
+  const VIBRATO_RATE = 10;
+  const VIBRATO_DEPTH_MAX = 20;
+
   // Smoothing: smooth = prev * 0.8 + current * 0.2 (applied to frequency and volume targets).
   const SMOOTH_PREV = 0.8;
   const SMOOTH_CUR = 0.2;
@@ -201,6 +231,7 @@
 
   let smoothFreq = PITCH_MIN;
   let smoothVol = 0;
+  let smoothOpen = 0;
 
   const video = document.getElementById('video');
   const canvas = document.getElementById('overlay');
@@ -212,6 +243,7 @@
   const freqLine = document.getElementById('freqLine');
   const volLine = document.getElementById('volLine');
   const handLine = document.getElementById('handLine');
+  const openLine = document.getElementById('openLine');
 
   function resizeCanvas() {
     const w = video.videoWidth || window.innerWidth;
@@ -268,10 +300,11 @@
   btnStart.addEventListener('click', startAudio);
   btnStop.addEventListener('click', stopAudio);
 
-  function applyAudioFromHands(pitchLm8, volLm8, handCount) {
+  function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks) {
     const scaleLock = scaleLockEl.checked;
     let targetFreq = smoothFreq;
     let targetVol = 0;
+    let targetOpen = 0;
 
     if (handCount === 0) {
       targetFreq = smoothFreq;
@@ -284,16 +317,25 @@
       targetVol = yToRawVolume(volLm8.y);
     }
 
+    if (pitchHandLandmarks) {
+      targetOpen = handOpennessNormalized(pitchHandLandmarks);
+    }
+
     smoothFreq = smoothFreq * SMOOTH_PREV + targetFreq * SMOOTH_CUR;
     smoothVol = smoothVol * SMOOTH_PREV + targetVol * SMOOTH_CUR;
+    smoothOpen = smoothOpen * SMOOTH_PREV + targetOpen * SMOOTH_CUR;
 
-    freqLine.textContent = 'Frequency: ' + smoothFreq.toFixed(1) + ' Hz';
+    const centerHz = smoothFreq + smoothOpen * OPEN_PITCH_HZ;
+    freqLine.textContent = 'Frequency: ' + centerHz.toFixed(1) + ' Hz';
     volLine.textContent = 'Volume: ' + smoothVol.toFixed(3);
+    openLine.textContent = 'Open: ' + smoothOpen.toFixed(2);
 
     if (!audioRunning || !audioCtx || !osc || !gainNode) return;
 
     const t = audioCtx.currentTime;
-    osc.frequency.setValueAtTime(smoothFreq, t);
+    const vibrato = Math.sin(t * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
+    const finalHz = centerHz + vibrato;
+    osc.frequency.setValueAtTime(finalHz, t);
     gainNode.gain.setValueAtTime(smoothVol, t);
   }
 
@@ -319,11 +361,86 @@
     ctx.fill();
   }
 
-  function drawFingerDots(pitchLm8, volLm8, handCount) {
+  function drawOpenTextOnCanvas() {
+    const h = canvas.height;
+    const label = 'Open: ' + smoothOpen.toFixed(2);
+    ctx.save();
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(label, 16, h - 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText(label, 16, h - 16);
+    ctx.restore();
+  }
+
+  // Hand mesh: thin lines + soft glow; pitch hand cyan, volume hand pink (matches sort order).
+  const MESH_LINE_WIDTH = 0.9;
+  const MESH_ALPHA_LINES = 0.52;
+  const MESH_ALPHA_JOINTS = 0.48;
+  const MESH_SHADOW_BLUR = 5;
+  const MESH_PALETTE_PITCH = {
+    line: 'rgb(105, 200, 210)',
+    glow: 'rgba(110, 215, 225, 0.55)',
+    joint: 'rgb(135, 225, 232)'
+  };
+  const MESH_PALETTE_VOL = {
+    line: 'rgb(210, 140, 180)',
+    glow: 'rgba(220, 150, 195, 0.5)',
+    joint: 'rgb(228, 175, 210)'
+  };
+
+  function lmToScreen(lm, w, h) {
+    return { x: (1 - lm.x) * w, y: lm.y * h };
+  }
+
+  /** Uses global HAND_CONNECTIONS from MediaPipe Hands. */
+  function drawHandMesh(landmarks, palette) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const conn = typeof HAND_CONNECTIONS !== 'undefined' ? HAND_CONNECTIONS : [];
+    ctx.save();
+    ctx.globalAlpha = MESH_ALPHA_LINES;
+    ctx.lineWidth = MESH_LINE_WIDTH;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = palette.line;
+    ctx.shadowColor = palette.glow;
+    ctx.shadowBlur = MESH_SHADOW_BLUR;
+    ctx.beginPath();
+    for (let i = 0; i < conn.length; i++) {
+      const a = conn[i][0];
+      const b = conn[i][1];
+      const p0 = lmToScreen(landmarks[a], w, h);
+      const p1 = lmToScreen(landmarks[b], w, h);
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = MESH_ALPHA_JOINTS;
+    ctx.fillStyle = palette.joint;
+    for (let j = 0; j < landmarks.length; j++) {
+      const p = lmToScreen(landmarks[j], w, h);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawFingerDots(pitchLm8, volLm8, handCount, list, order) {
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-    if (handCount === 0) return;
+
+    if (audioRunning && list && handCount > 0 && order.length) {
+      drawHandMesh(list[order[0]], MESH_PALETTE_PITCH);
+      if (handCount >= 2) {
+        drawHandMesh(list[order[1]], MESH_PALETTE_VOL);
+      }
+    }
 
     if (pitchLm8) {
       drawFingerDotAt(
@@ -341,6 +458,7 @@
         'rgba(180, 220, 255, 0.95)'
       );
     }
+    drawOpenTextOnCanvas();
   }
 
   function onResults(results) {
@@ -349,11 +467,13 @@
 
     let pitchLm8 = null;
     let volLm8 = null;
+    let pitchHandLandmarks = null;
+    let order = [];
 
     if (handCount > 0) {
-      const order = sortHandsPitchThenVolume(list);
-      const pitchHand = list[order[0]];
-      pitchLm8 = pitchHand[8];
+      order = sortHandsPitchThenVolume(list);
+      pitchHandLandmarks = list[order[0]];
+      pitchLm8 = pitchHandLandmarks[8];
       if (handCount >= 2) {
         const volHand = list[order[1]];
         volLm8 = volHand[8];
@@ -368,8 +488,8 @@
       handLine.textContent = 'Hands: 2 — green pitch · blue volume';
     }
 
-    applyAudioFromHands(pitchLm8, volLm8, handCount);
-    drawFingerDots(pitchLm8, volLm8, handCount);
+    applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks);
+    drawFingerDots(pitchLm8, volLm8, handCount, list, order);
   }
 
   const hands = new Hands({
