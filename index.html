@@ -150,7 +150,7 @@
     #hint {
       position: absolute;
       left: 50%;
-      bottom: 6.25rem;
+      bottom: 4.5rem;
       transform: translateX(-50%);
       z-index: 1;
       font-size: 0.85rem;
@@ -277,6 +277,7 @@
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.15);
       transition: background 0.25s ease, transform 0.25s ease;
+      cursor: pointer;
     }
     .cal-dots .cal-dot.active {
       background: rgba(130, 200, 255, 0.85);
@@ -418,41 +419,33 @@
       background: rgba(28, 28, 42, 0.6);
       border-color: rgba(255, 255, 255, 0.08);
     }
-    #pitch-strip {
-      position: absolute;
-      left: 50%;
-      bottom: 6.25rem;
-      transform: translateX(-50%);
-      width: min(92vw, 520px);
-      height: 6px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, rgba(60, 120, 255, 0.45), rgba(255, 120, 220, 0.35));
-      z-index: 3;
-      pointer-events: none;
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+    .cal-step-nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
     }
-    #pitch-strip .pitch-mark {
-      position: absolute;
-      top: 50%;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      margin-left: 0;
-      box-shadow: 0 0 12px currentColor;
+    .cal-step-nav button {
+      flex: 1;
+      padding: 0.4rem 0.55rem;
+      font-size: 0.78rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(30, 32, 48, 0.75);
+      color: rgba(230, 232, 245, 0.9);
+      cursor: pointer;
     }
-    #pitch-strip .pitch-mark.you {
-      background: rgba(120, 255, 160, 0.95);
-      color: rgba(120, 255, 160, 0.95);
-      z-index: 2;
+    .cal-step-nav button:hover:not(:disabled) {
+      background: rgba(44, 48, 68, 0.9);
     }
-    #pitch-strip .pitch-mark.ghost {
-      background: rgba(255, 255, 255, 0.55);
-      color: rgba(255, 255, 255, 0.6);
-      z-index: 1;
+    .cal-step-nav button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
-    #pitch-strip .pitch-mark.ghost.hidden {
-      display: none;
+    .controls-panel button.control-field.cal-ctl-btn {
+      font: inherit;
+      cursor: pointer;
+      color: rgba(232, 232, 240, 0.95);
     }
     .meter-row {
       font-size: 0.82rem;
@@ -465,17 +458,11 @@
   <div id="app">
     <video id="video" playsinline></video>
     <canvas id="overlay"></canvas>
-    <div id="pitch-strip" aria-hidden="true">
-      <span id="pitchMarkYou" class="pitch-mark you" style="left: 50%"></span>
-      <span id="pitchMarkGhost" class="pitch-mark ghost hidden" style="left: 50%"></span>
-    </div>
     <div id="hud">
       <div id="freqLine">Frequency: — Hz</div>
       <div id="volLine">Volume: —</div>
       <div id="handLine">Hand: —</div>
       <div id="openLine">Open: —</div>
-      <div id="modeLine" class="meter-row">Mode: —</div>
-      <div id="intentLine" class="meter-row">Intent: —</div>
       <div id="featureLine" class="meter-row">Open / Spread / Curve / Stability: —</div>
     </div>
     <p id="hint">Pitch: index X (horizontal line) · right hand = pitch, left = volume · Learn mode: C Major snap on by default</p>
@@ -512,7 +499,7 @@
             <option value="sawtooth">sawtooth</option>
           </select>
         </div>
-        <button type="button" id="btnRecalibrate" class="control-field" style="cursor:pointer;border-radius:8px;font-size:0.85rem;">
+        <button type="button" id="btnRecalibrate" class="control-field cal-ctl-btn">
           Calibrate
         </button>
       </div>
@@ -524,10 +511,14 @@
       <div class="cal-progress-top">
         <span id="cal-step-badge">Step 1 of 3 — Hand range</span>
         <div class="cal-dots" aria-hidden="true">
-          <span class="cal-dot active" data-step="0"></span>
-          <span class="cal-dot" data-step="1"></span>
-          <span class="cal-dot" data-step="2"></span>
+          <span class="cal-dot active" data-step="0" role="button" tabindex="0"></span>
+          <span class="cal-dot" data-step="1" role="button" tabindex="0"></span>
+          <span class="cal-dot" data-step="2" role="button" tabindex="0"></span>
         </div>
+      </div>
+      <div class="cal-step-nav">
+        <button type="button" id="cal-step-prev">Back</button>
+        <button type="button" id="cal-step-next">Next</button>
       </div>
       <h2 id="cal-title">Set your pitch hand range</h2>
       <p id="cal-subtitle" class="cal-subtitle">Use your right hand (pitch hand). Spread your fingers wide.</p>
@@ -869,8 +860,6 @@
   const volLine = document.getElementById('volLine');
   const handLine = document.getElementById('handLine');
   const openLine = document.getElementById('openLine');
-  const modeLine = document.getElementById('modeLine');
-  const intentLine = document.getElementById('intentLine');
   const featureLine = document.getElementById('featureLine');
   const btnLearn = document.getElementById('btnLearn');
   const learnPanel = document.getElementById('learn-panel');
@@ -888,10 +877,10 @@
   const calDefault = document.getElementById('cal-default');
   const btnRecalibrate = document.getElementById('btnRecalibrate');
   const calDots = calOverlay ? calOverlay.querySelectorAll('.cal-dot') : [];
+  const calStepPrev = document.getElementById('cal-step-prev');
+  const calStepNext = document.getElementById('cal-step-next');
   /** @type {CanvasRenderingContext2D | null} */
   let calCtx = calCanvas ? calCanvas.getContext('2d') : null;
-  const pitchMarkYou = document.getElementById('pitchMarkYou');
-  const pitchMarkGhost = document.getElementById('pitchMarkGhost');
 
   function resizeCanvas() {
     const w = video.videoWidth || window.innerWidth;
@@ -928,7 +917,6 @@
     currentSong = null;
     lastLearnSegmentStartMs = -1;
     stopGuideAudio();
-    if (pitchMarkGhost) pitchMarkGhost.classList.add('hidden');
     if (btnLearn) btnLearn.classList.remove('learn-active');
     if (learnPanel) learnPanel.classList.add('hidden');
   }
@@ -963,10 +951,6 @@
     if (!seg) return;
     learnTargetX = normXFromHz(seg.freq);
     ghostX = ghostX * (1 - GHOST_SMOOTH) + learnTargetX * GHOST_SMOOTH;
-    if (pitchMarkGhost) {
-      pitchMarkGhost.classList.remove('hidden');
-      pitchMarkGhost.style.left = (ghostX * 100).toFixed(2) + '%';
-    }
     if (guideOsc && guideGain && seg.startMs !== lastLearnSegmentStartMs) {
       lastLearnSegmentStartMs = seg.startMs;
       guideOsc.frequency.rampTo(seg.freq, GUIDE_FREQ_RAMP_S);
@@ -989,10 +973,6 @@
       guideOsc.frequency.value = first;
       guideGain.gain.value = 0;
       guideGain.gain.rampTo(0.11, 0.08);
-    }
-    if (pitchMarkGhost) {
-      pitchMarkGhost.classList.remove('hidden');
-      pitchMarkGhost.style.left = (ghostX * 100).toFixed(2) + '%';
     }
     lastLearnSegmentStartMs = 0;
   }
@@ -1201,12 +1181,8 @@
     volLine.textContent = 'Volume: ' + smoothVol.toFixed(3);
     openLine.textContent =
       'Pinch/spread: ' + smoothOpen.toFixed(2) + ' / ' + smoothSpread.toFixed(2) + ' · curve ' + smoothCurvature.toFixed(2);
-    modeLine.textContent = 'Mode: ' + mode;
-    intentLine.textContent = 'Intent: ' + intent;
     featureLine.textContent =
       'Stability ' + stab.toFixed(2) + ' · jitter ' + jitter.toFixed(4) + ' · vel ' + handVelocity.toFixed(3);
-
-    if (pitchMarkYou) pitchMarkYou.style.left = (smoothPitchNormX * 100).toFixed(2) + '%';
 
     const hadHands = lastHandCount > 0;
     const handsLost = handCount === 0 && hadHands;
@@ -1387,8 +1363,11 @@
   const CAL_SPREAD_STABLE = 0.014;
   const CAL_PINCH_STABLE = 0.012;
   const CAL_CURVE_STABLE = 0.04;
+  /** Capture (auto or manual) only when meter is at least this match (0–1). */
+  const CAL_MIN_MATCH = 0.95;
 
   let calStep = 0;
+  let lastCalProgress01 = 0;
   let calSessionMaxSpread = 0;
   let calSessionMinPinch = 0.5;
   let calStableAccumMs = 0;
@@ -1524,12 +1503,18 @@
     calPinchHist = [];
     calCurveHist = [];
     calLastUiTs = 0;
+    lastCalProgress01 = 0;
   }
 
   function updateCalDotIndicators() {
     for (let i = 0; i < calDots.length; i++) {
       calDots[i].classList.toggle('active', i === calStep);
     }
+  }
+
+  function updateCalNavButtons() {
+    if (calStepPrev) calStepPrev.disabled = calStep <= 0;
+    if (calStepNext) calStepNext.disabled = calStep >= 2;
   }
 
   function updateCalStepUI() {
@@ -1557,6 +1542,7 @@
     if (calSubtitle) calSubtitle.textContent = subs[calStep] || '';
     if (calMeterName) calMeterName.textContent = meters[calStep] || '';
     updateCalDotIndicators();
+    updateCalNavButtons();
     if (calMeterFill) calMeterFill.classList.remove('cal-meter-ready');
     calStatus.className = 'cal-status';
   }
@@ -1621,6 +1607,11 @@
 
   function runCalCapture(lm) {
     if (!lm || !lm[8]) return;
+    if (lastCalProgress01 < CAL_MIN_MATCH) {
+      calStatus.className = 'cal-status cal-hint-warn';
+      calStatus.textContent = 'Match the bar to at least 95% before capturing';
+      return;
+    }
     applyCalCaptureData(lm);
     showCalCapturedThen(function () {
       advanceAfterCapture();
@@ -1637,6 +1628,7 @@
       calNoHandFrames++;
       calLowLightFrames = 0;
       calStableAccumMs = 0;
+      lastCalProgress01 = 0;
       calMeterFill.style.width = '0%';
       if (calMeterPct) calMeterPct.textContent = '';
       calStatus.className = 'cal-status cal-hint-warn';
@@ -1652,6 +1644,7 @@
     const side = validatePitchHandSide(lm);
     if (side === 'wrong') {
       calStableAccumMs = 0;
+      lastCalProgress01 = 0;
       calStatus.className = 'cal-status cal-hint-warn';
       calStatus.textContent = cal.leftHanded
         ? 'Use your pitch hand (left hand) in the frame'
@@ -1672,6 +1665,7 @@
       calStatus.className = 'cal-status cal-hint-warn';
       calStatus.textContent = 'Try brighter lighting so we can see your hand clearly';
       calStableAccumMs = 0;
+      lastCalProgress01 = 0;
       if (calMeterFill) calMeterFill.style.width = '0%';
       return;
     }
@@ -1680,6 +1674,7 @@
       calSessionMaxSpread = Math.max(calSessionMaxSpread, spread);
       const denom = Math.max(calSessionMaxSpread, 0.09);
       const progress = Math.min(1, spread / denom);
+      lastCalProgress01 = progress;
       calMeterFill.style.width = (progress * 100).toFixed(1) + '%';
       if (calMeterPct) calMeterPct.textContent = Math.round(progress * 100) + '%';
 
@@ -1694,7 +1689,7 @@
         calStatus.className = 'cal-status cal-hint-ok';
         calStatus.textContent = '✅ Great — hold steady';
         calMeterFill.classList.add('cal-meter-ready');
-        if (calStableAccumMs >= CAL_AUTO_MS) {
+        if (calStableAccumMs >= CAL_AUTO_MS && lastCalProgress01 >= CAL_MIN_MATCH) {
           runCalCapture(lm);
         }
       } else {
@@ -1709,6 +1704,7 @@
       calSessionMinPinch = Math.min(calSessionMinPinch, pinch);
       const denom = Math.max(cal.openMax - calSessionMinPinch, 0.02);
       const fill = denom > 0 ? Math.min(1, (cal.openMax - pinch) / denom) : 0;
+      lastCalProgress01 = fill;
       calMeterFill.style.width = (fill * 100).toFixed(1) + '%';
       if (calMeterPct) calMeterPct.textContent = Math.round(fill * 100) + '%';
 
@@ -1723,7 +1719,7 @@
         calStatus.className = 'cal-status cal-hint-ok';
         calStatus.textContent = '✅ Great — hold steady';
         calMeterFill.classList.add('cal-meter-ready');
-        if (calStableAccumMs >= CAL_AUTO_MS) {
+        if (calStableAccumMs >= CAL_AUTO_MS && lastCalProgress01 >= CAL_MIN_MATCH) {
           runCalCapture(lm);
         }
       } else {
@@ -1742,6 +1738,7 @@
       }, 0) / Math.max(1, calCurveHist.length);
       const cStd = stdDevRing(calCurveHist);
       const progress = Math.min(1, 1 - Math.min(1, cStd / 0.35));
+      lastCalProgress01 = progress;
       calMeterFill.style.width = (progress * 100).toFixed(1) + '%';
       if (calMeterPct) calMeterPct.textContent = Math.round(progress * 100) + '%';
 
@@ -1751,7 +1748,7 @@
         calStatus.className = 'cal-status cal-hint-ok';
         calStatus.textContent = '✅ Great — hold steady';
         calMeterFill.classList.add('cal-meter-ready');
-        if (calStableAccumMs >= CAL_AUTO_MS) {
+        if (calStableAccumMs >= CAL_AUTO_MS && lastCalProgress01 >= CAL_MIN_MATCH) {
           runCalCapture(lm);
         }
       } else {
@@ -1876,6 +1873,32 @@
   btnRecalibrate.addEventListener('click', function () {
     openCalibration();
   });
+
+  if (calStepPrev) {
+    calStepPrev.addEventListener('click', function () {
+      if (calStep <= 0) return;
+      calStep--;
+      resetCalStepSessionForStep();
+      updateCalStepUI();
+    });
+  }
+  if (calStepNext) {
+    calStepNext.addEventListener('click', function () {
+      if (calStep >= 2) return;
+      calStep++;
+      resetCalStepSessionForStep();
+      updateCalStepUI();
+    });
+  }
+  for (let di = 0; di < calDots.length; di++) {
+    calDots[di].addEventListener('click', function () {
+      const s = parseInt(this.getAttribute('data-step'), 10);
+      if (Number.isNaN(s) || s === calStep) return;
+      calStep = s;
+      resetCalStepSessionForStep();
+      updateCalStepUI();
+    });
+  }
 
   maybeShowCalibrationOnLoad();
 
