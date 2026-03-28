@@ -225,54 +225,198 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(6, 6, 12, 0.88);
-      backdrop-filter: blur(8px);
+      padding: 1rem;
+      background: rgba(4, 4, 10, 0.92);
+      backdrop-filter: blur(12px);
       pointer-events: auto;
+      transition: opacity 0.25s ease;
     }
     #calibration-overlay.hidden {
       display: none;
     }
-    .cal-card {
-      max-width: 22rem;
-      padding: 1.25rem 1.35rem;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(18, 18, 32, 0.95);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    #calibration-overlay.cal-captured-flash .cal-shell {
+      animation: calPulse 0.45s ease;
     }
-    .cal-card h2 {
-      font-size: 1.1rem;
+    @keyframes calPulse {
+      0% { box-shadow: 0 0 0 0 rgba(120, 200, 255, 0.5); }
+      50% { box-shadow: 0 0 28px 4px rgba(120, 200, 255, 0.35); }
+      100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+    }
+    .cal-shell {
+      width: min(100%, 420px);
+      max-height: min(96vh, 720px);
+      overflow: auto;
+      padding: 1.1rem 1.15rem 1.15rem;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: linear-gradient(165deg, rgba(22, 22, 38, 0.97) 0%, rgba(12, 12, 22, 0.98) 100%);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 20px 50px rgba(0, 0, 0, 0.55);
+    }
+    .cal-progress-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.65rem;
+    }
+    #cal-step-badge {
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(180, 200, 230, 0.75);
+    }
+    .cal-dots {
+      display: flex;
+      gap: 0.35rem;
+    }
+    .cal-dots .cal-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      transition: background 0.25s ease, transform 0.25s ease;
+    }
+    .cal-dots .cal-dot.active {
+      background: rgba(130, 200, 255, 0.85);
+      box-shadow: 0 0 10px rgba(120, 190, 255, 0.45);
+      transform: scale(1.15);
+    }
+    .cal-dots .cal-dot:not(.active) {
+      opacity: 0.55;
+    }
+    .cal-shell h2 {
+      font-size: 1.15rem;
       font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #e8e8f8;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.35rem;
+      color: #f0f0f8;
     }
-    .cal-card p {
+    .cal-subtitle {
       font-size: 0.88rem;
-      line-height: 1.45;
-      color: rgba(232, 232, 242, 0.88);
-      margin-bottom: 1rem;
+      line-height: 1.4;
+      color: rgba(230, 232, 245, 0.9);
+      margin-bottom: 0.5rem;
     }
-    .cal-card .cal-actions {
+    .cal-hand-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.78rem;
+      color: rgba(200, 210, 235, 0.75);
+      cursor: pointer;
+      margin-bottom: 0.45rem;
+      user-select: none;
+    }
+    .cal-hand-toggle input {
+      accent-color: #7ad;
+    }
+    .cal-helper {
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: rgba(170, 185, 215, 0.72);
+      margin-bottom: 0.75rem;
+    }
+    .cal-preview-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 0.85rem;
+      background: #080810;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+    }
+    .cal-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .cal-preview-dim {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 70% at 50% 45%, transparent 30%, rgba(6, 8, 18, 0.55) 100%);
+      pointer-events: none;
+    }
+    .cal-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .cal-meter-wrap {
+      margin-bottom: 0.55rem;
+    }
+    .cal-meter-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.75rem;
+      color: rgba(200, 210, 235, 0.8);
+      margin-bottom: 0.35rem;
+    }
+    .cal-meter-track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+    }
+    .cal-meter-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(90, 160, 255, 0.5), rgba(140, 220, 200, 0.85));
+      box-shadow: 0 0 16px rgba(120, 200, 255, 0.35);
+      transition: width 0.12s ease-out;
+    }
+    .cal-meter-fill.cal-meter-ready {
+      background: linear-gradient(90deg, rgba(80, 220, 160, 0.6), rgba(120, 255, 200, 0.95));
+      box-shadow: 0 0 18px rgba(100, 255, 190, 0.4);
+    }
+    .cal-status {
+      min-height: 1.35rem;
+      font-size: 0.82rem;
+      line-height: 1.35;
+      color: rgba(190, 210, 235, 0.92);
+      margin-bottom: 0.65rem;
+    }
+    .cal-status.cal-hint-warn {
+      color: rgba(255, 200, 140, 0.9);
+    }
+    .cal-status.cal-hint-ok {
+      color: rgba(140, 235, 200, 0.95);
+    }
+    .cal-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      margin-top: 0.75rem;
+      margin-top: 0.25rem;
     }
-    .cal-card button {
-      padding: 0.45rem 0.85rem;
-      font-size: 0.85rem;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      background: rgba(32, 40, 72, 0.9);
-      color: #fff;
+    .cal-actions button {
+      flex: 1;
+      min-width: 8rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.82rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(38, 48, 78, 0.65);
+      color: rgba(245, 246, 255, 0.95);
       cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
     }
-    .cal-card button:hover {
-      background: rgba(48, 56, 96, 0.95);
+    .cal-actions button:hover {
+      background: rgba(52, 62, 98, 0.85);
+      border-color: rgba(255, 255, 255, 0.22);
     }
-    .cal-card button.secondary {
-      background: rgba(40, 40, 52, 0.75);
-      border-color: rgba(255, 255, 255, 0.12);
+    .cal-actions button.secondary {
+      background: rgba(28, 28, 42, 0.6);
+      border-color: rgba(255, 255, 255, 0.08);
     }
     #pitch-strip {
       position: absolute;
@@ -375,13 +519,41 @@
     </div>
   </div>
 
-  <div id="calibration-overlay" role="dialog" aria-labelledby="cal-title" aria-modal="true">
-    <div class="cal-card">
-      <h2 id="cal-title">Instrument calibration</h2>
-      <p id="cal-instruction"></p>
+  <div id="calibration-overlay" class="hidden" role="dialog" aria-labelledby="cal-title" aria-modal="true">
+    <div class="cal-shell">
+      <div class="cal-progress-top">
+        <span id="cal-step-badge">Step 1 of 3 — Hand range</span>
+        <div class="cal-dots" aria-hidden="true">
+          <span class="cal-dot active" data-step="0"></span>
+          <span class="cal-dot" data-step="1"></span>
+          <span class="cal-dot" data-step="2"></span>
+        </div>
+      </div>
+      <h2 id="cal-title">Set your pitch hand range</h2>
+      <p id="cal-subtitle" class="cal-subtitle">Use your right hand (pitch hand). Spread your fingers wide.</p>
+      <label class="cal-hand-toggle">
+        <input type="checkbox" id="cal-left-handed" />
+        <span>I’m left-handed (pitch hand is my left)</span>
+      </label>
+      <p class="cal-helper">We use this to match the instrument to your hand — so pitch and tone feel natural.</p>
+      <div class="cal-preview-wrap">
+        <video id="cal-video" class="cal-video" playsinline muted autoplay></video>
+        <div class="cal-preview-dim" aria-hidden="true"></div>
+        <canvas id="cal-canvas" class="cal-canvas" width="640" height="480"></canvas>
+      </div>
+      <div class="cal-meter-wrap">
+        <div class="cal-meter-label">
+          <span id="cal-meter-name">Hand spread</span>
+          <span id="cal-meter-pct"></span>
+        </div>
+        <div class="cal-meter-track">
+          <div id="cal-meter-fill" class="cal-meter-fill"></div>
+        </div>
+      </div>
+      <p id="cal-status" class="cal-status" role="status"></p>
       <div class="cal-actions">
-        <button type="button" id="cal-capture">Capture</button>
-        <button type="button" id="cal-skip" class="secondary">skip (defaults)</button>
+        <button type="button" id="cal-capture" class="secondary">Capture manually</button>
+        <button type="button" id="cal-default" class="secondary">Use defaults</button>
       </div>
     </div>
   </div>
@@ -428,7 +600,7 @@
   const GAIN_RAMP_FAST = 0.02;
   const GAIN_RAMP_SLOW = 0.12;
 
-  /** @type {{ spreadMin:number, spreadMax:number, openMin:number, openMax:number, curvatureBaseline:number, pitchXMin:number, pitchXMax:number }} */
+  /** @type {{ spreadMin:number, spreadMax:number, openMin:number, openMax:number, curvatureBaseline:number, pitchXMin:number, pitchXMax:number, leftHanded:boolean }} */
   let cal = {
     spreadMin: 0.02,
     spreadMax: 0.38,
@@ -436,7 +608,8 @@
     openMax: 0.24,
     curvatureBaseline: 2.15,
     pitchXMin: 0.12,
-    pitchXMax: 0.88
+    pitchXMax: 0.88,
+    leftHanded: false
   };
 
   function loadCalFromStorage() {
@@ -588,6 +761,18 @@
     return idx;
   }
 
+  /** @returns {number} index into landmarksList */
+  function pitchHandOrderIndex(order, handCount) {
+    if (handCount === 0) return -1;
+    if (handCount === 1) return order[0];
+    return cal.leftHanded ? order[1] : order[0];
+  }
+  /** @returns {number} index into landmarksList */
+  function volHandOrderIndex(order, handCount) {
+    if (handCount < 2) return -1;
+    return cal.leftHanded ? order[0] : order[1];
+  }
+
   const FINGERTIP_IDS = [4, 8, 12, 16, 20];
 
   function euclid2d(a, b) {
@@ -690,10 +875,21 @@
   const btnLearn = document.getElementById('btnLearn');
   const learnPanel = document.getElementById('learn-panel');
   const calOverlay = document.getElementById('calibration-overlay');
-  const calInstruction = document.getElementById('cal-instruction');
+  const calStepBadge = document.getElementById('cal-step-badge');
+  const calSubtitle = document.getElementById('cal-subtitle');
+  const calStatus = document.getElementById('cal-status');
+  const calVideo = document.getElementById('cal-video');
+  const calCanvas = document.getElementById('cal-canvas');
+  const calMeterFill = document.getElementById('cal-meter-fill');
+  const calMeterPct = document.getElementById('cal-meter-pct');
+  const calMeterName = document.getElementById('cal-meter-name');
+  const calLeftHanded = document.getElementById('cal-left-handed');
   const calCapture = document.getElementById('cal-capture');
-  const calSkip = document.getElementById('cal-skip');
+  const calDefault = document.getElementById('cal-default');
   const btnRecalibrate = document.getElementById('btnRecalibrate');
+  const calDots = calOverlay ? calOverlay.querySelectorAll('.cal-dot') : [];
+  /** @type {CanvasRenderingContext2D | null} */
+  let calCtx = calCanvas ? calCanvas.getContext('2d') : null;
   const pitchMarkYou = document.getElementById('pitchMarkYou');
   const pitchMarkGhost = document.getElementById('pitchMarkGhost');
 
@@ -1161,9 +1357,11 @@
     }
 
     if (list && handCount > 0 && order.length) {
-      drawHandMesh(list[order[0]], MESH_PALETTE_PITCH);
+      const pi = pitchHandOrderIndex(order, handCount);
+      drawHandMesh(list[pi], MESH_PALETTE_PITCH);
       if (handCount >= 2) {
-        drawHandMesh(list[order[1]], MESH_PALETTE_VOL);
+        const vi = volHandOrderIndex(order, handCount);
+        drawHandMesh(list[vi], MESH_PALETTE_VOL);
       }
     }
 
@@ -1185,6 +1383,388 @@
     }
   }
 
+  const CAL_AUTO_MS = 800;
+  const CAL_SPREAD_STABLE = 0.014;
+  const CAL_PINCH_STABLE = 0.012;
+  const CAL_CURVE_STABLE = 0.04;
+
+  let calStep = 0;
+  let calSessionMaxSpread = 0;
+  let calSessionMinPinch = 0.5;
+  let calStableAccumMs = 0;
+  let calLastUiTs = 0;
+  let calNoHandFrames = 0;
+  let calLowLightFrames = 0;
+  let calSpreadHist = [];
+  let calPinchHist = [];
+  let calCurveHist = [];
+  let calCapturing = false;
+
+  function syncCalVideoStream() {
+    if (!calVideo || !video) return;
+    try {
+      if (video.srcObject) {
+        calVideo.srcObject = video.srcObject;
+        calVideo.play().catch(function () {});
+      }
+    } catch (_) {}
+  }
+
+  function resizeCalCanvas() {
+    if (!calCanvas || !calCtx) return;
+    const wrap = calCanvas.parentElement;
+    if (!wrap) return;
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    if (w < 2 || h < 2) return;
+    if (calCanvas.width !== Math.floor(w) || calCanvas.height !== Math.floor(h)) {
+      calCanvas.width = Math.floor(w);
+      calCanvas.height = Math.floor(h);
+    }
+  }
+
+  function lmToScreenCal(lm, w, h) {
+    return { x: (1 - lm.x) * w, y: lm.y * h };
+  }
+
+  function strokeRoundHandBounds(calCtx2, lm, w, h) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let j = 0; j < lm.length; j++) {
+      const p = lmToScreenCal(lm[j], w, h);
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    const pad = 16;
+    const x = minX - pad;
+    const y = minY - pad;
+    const ww = maxX - minX + pad * 2;
+    const hh = maxY - minY + pad * 2;
+    const r = 14;
+    calCtx2.beginPath();
+    calCtx2.moveTo(x + r, y);
+    calCtx2.arcTo(x + ww, y, x + ww, y + hh, r);
+    calCtx2.arcTo(x + ww, y + hh, x, y + hh, r);
+    calCtx2.arcTo(x, y + hh, x, y, r);
+    calCtx2.arcTo(x, y, x + ww, y, r);
+    calCtx2.closePath();
+  }
+
+  function drawCalibrationSkeleton(lm) {
+    if (!calCanvas || !calCtx || !lm) return;
+    resizeCalCanvas();
+    const w = calCanvas.width;
+    const h = calCanvas.height;
+    calCtx.clearRect(0, 0, w, h);
+    const conn = typeof HAND_CONNECTIONS !== 'undefined' ? HAND_CONNECTIONS : [];
+    calCtx.save();
+    calCtx.lineWidth = 1.2;
+    calCtx.lineCap = 'round';
+    calCtx.lineJoin = 'round';
+    calCtx.strokeStyle = 'rgba(110, 215, 255, 0.45)';
+    calCtx.shadowColor = 'rgba(100, 200, 255, 0.35)';
+    calCtx.shadowBlur = 10;
+    calCtx.beginPath();
+    for (let i = 0; i < conn.length; i++) {
+      const a = conn[i][0];
+      const b = conn[i][1];
+      const p0 = lmToScreenCal(lm[a], w, h);
+      const p1 = lmToScreenCal(lm[b], w, h);
+      calCtx.moveTo(p0.x, p0.y);
+      calCtx.lineTo(p1.x, p1.y);
+    }
+    calCtx.stroke();
+    calCtx.shadowBlur = 0;
+    calCtx.strokeStyle = 'rgba(130, 230, 255, 0.55)';
+    calCtx.lineWidth = 2;
+    calCtx.shadowColor = 'rgba(100, 200, 255, 0.4)';
+    calCtx.shadowBlur = 16;
+    strokeRoundHandBounds(calCtx, lm, w, h);
+    calCtx.stroke();
+    calCtx.restore();
+    const tips = [THUMB_TIP, INDEX_TIP, PINKY_TIP];
+    for (let t = 0; t < tips.length; t++) {
+      const id = tips[t];
+      const p = lmToScreenCal(lm[id], w, h);
+      const g = calCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 16);
+      g.addColorStop(0, 'rgba(200, 255, 230, 0.95)');
+      g.addColorStop(0.45, 'rgba(100, 200, 255, 0.4)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      calCtx.fillStyle = g;
+      calCtx.beginPath();
+      calCtx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+      calCtx.fill();
+      calCtx.fillStyle = 'rgba(255,255,255,0.92)';
+      calCtx.beginPath();
+      calCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      calCtx.fill();
+    }
+  }
+
+  function validatePitchHandSide(lm) {
+    if (!lm || !lm[0]) return 'no-hand';
+    const wx = lm[0].x;
+    if (cal.leftHanded) {
+      if (wx < 0.4) return 'wrong';
+    } else {
+      if (wx > 0.6) return 'wrong';
+    }
+    return 'ok';
+  }
+
+  function resetCalSessionVars() {
+    calSessionMaxSpread = 0;
+    calSessionMinPinch = 0.5;
+    calStableAccumMs = 0;
+    calSpreadHist = [];
+    calPinchHist = [];
+    calCurveHist = [];
+    calLastUiTs = 0;
+  }
+
+  function updateCalDotIndicators() {
+    for (let i = 0; i < calDots.length; i++) {
+      calDots[i].classList.toggle('active', i === calStep);
+    }
+  }
+
+  function updateCalStepUI() {
+    const badges = [
+      'Step 1 of 3 — Hand range',
+      'Step 2 of 3 — Pinch',
+      'Step 3 of 3 — Relaxed hand'
+    ];
+    const titles = [
+      'Set your pitch hand range',
+      'Pinch thumb and index',
+      'Relaxed neutral hand'
+    ];
+    const subs = [
+      cal.leftHanded
+        ? 'Use your left hand (pitch hand). Spread your fingers wide.'
+        : 'Use your right hand (pitch hand). Spread your fingers wide.',
+      'Pinch your thumb and index tip together as tightly as you can.',
+      'Let your hand rest in a soft, open curve — not stiff, not fully closed.'
+    ];
+    const meters = ['Hand spread', 'Pinch depth', 'Hand shape'];
+    if (calStepBadge) calStepBadge.textContent = badges[calStep] || '';
+    const titleEl = document.getElementById('cal-title');
+    if (titleEl) titleEl.textContent = titles[calStep] || '';
+    if (calSubtitle) calSubtitle.textContent = subs[calStep] || '';
+    if (calMeterName) calMeterName.textContent = meters[calStep] || '';
+    updateCalDotIndicators();
+    if (calMeterFill) calMeterFill.classList.remove('cal-meter-ready');
+    calStatus.className = 'cal-status';
+  }
+
+  function resetCalStepSessionForStep() {
+    resetCalSessionVars();
+  }
+
+  function applyCalCaptureData(lm) {
+    if (calStep === 0) {
+      cal.spreadMax = Math.max(cal.spreadMin + 0.04, spreadIndexPinkyRaw(lm));
+      cal.openMax = Math.max(cal.openMin + 0.02, pinchOpennessRaw(lm));
+    } else if (calStep === 1) {
+      cal.openMin = Math.max(0.01, Math.min(pinchOpennessRaw(lm), cal.openMax - 0.02));
+      cal.spreadMin = Math.max(0.01, Math.min(spreadIndexPinkyRaw(lm), cal.spreadMax - 0.03));
+    } else {
+      cal.curvatureBaseline = fingerCurvatureAvg(lm);
+    }
+  }
+
+  function showCalCapturedThen(next) {
+    calCapturing = true;
+    calOverlay.classList.add('cal-captured-flash');
+    calStatus.textContent = 'Captured ✓';
+    calStatus.className = 'cal-status cal-hint-ok';
+    setTimeout(function () {
+      calOverlay.classList.remove('cal-captured-flash');
+      calCapturing = false;
+      next();
+    }, 420);
+  }
+
+  function finishCalibration() {
+    try {
+      localStorage.setItem('thereminCalDone', '1');
+      saveCalToStorage();
+    } catch (_) {}
+    calOverlay.classList.add('hidden');
+    btnStart.disabled = false;
+  }
+
+  function openCalibration() {
+    calStep = 0;
+    resetCalStepSessionForStep();
+    updateCalStepUI();
+    calOverlay.classList.remove('hidden');
+    btnStart.disabled = true;
+    if (calLeftHanded) calLeftHanded.checked = !!cal.leftHanded;
+    syncCalVideoStream();
+    resizeCalCanvas();
+  }
+
+  function advanceAfterCapture() {
+    calStep++;
+    if (calStep >= 3) {
+      finishCalibration();
+    } else {
+      resetCalStepSessionForStep();
+      updateCalStepUI();
+    }
+  }
+
+  function runCalCapture(lm) {
+    if (!lm || !lm[8]) return;
+    applyCalCaptureData(lm);
+    showCalCapturedThen(function () {
+      advanceAfterCapture();
+    });
+  }
+
+  function processCalibrationFrame(lm, handCount) {
+    if (!calOverlay || calOverlay.classList.contains('hidden') || calCapturing || !calMeterFill) return;
+    const now = performance.now();
+    const dt = calLastUiTs > 0 ? Math.min(0.05, now - calLastUiTs) : 0.033;
+    calLastUiTs = now;
+
+    if (!lm || !lm[8]) {
+      calNoHandFrames++;
+      calLowLightFrames = 0;
+      calStableAccumMs = 0;
+      calMeterFill.style.width = '0%';
+      if (calMeterPct) calMeterPct.textContent = '';
+      calStatus.className = 'cal-status cal-hint-warn';
+      if (calNoHandFrames > 12) {
+        calStatus.textContent = 'Show your pitch hand in the frame';
+      } else {
+        calStatus.textContent = '';
+      }
+      return;
+    }
+    calNoHandFrames = 0;
+
+    const side = validatePitchHandSide(lm);
+    if (side === 'wrong') {
+      calStableAccumMs = 0;
+      calStatus.className = 'cal-status cal-hint-warn';
+      calStatus.textContent = cal.leftHanded
+        ? 'Use your pitch hand (left hand) in the frame'
+        : 'Use your pitch hand (right hand) in the frame';
+      return;
+    }
+
+    const spread = spreadIndexPinkyRaw(lm);
+    const pinch = pinchOpennessRaw(lm);
+    const curve = fingerCurvatureAvg(lm);
+
+    if (spread < 0.055 && handCount > 0) {
+      calLowLightFrames++;
+    } else {
+      calLowLightFrames = 0;
+    }
+    if (calLowLightFrames > 90) {
+      calStatus.className = 'cal-status cal-hint-warn';
+      calStatus.textContent = 'Try brighter lighting so we can see your hand clearly';
+      calStableAccumMs = 0;
+      if (calMeterFill) calMeterFill.style.width = '0%';
+      return;
+    }
+
+    if (calStep === 0) {
+      calSessionMaxSpread = Math.max(calSessionMaxSpread, spread);
+      const denom = Math.max(calSessionMaxSpread, 0.09);
+      const progress = Math.min(1, spread / denom);
+      calMeterFill.style.width = (progress * 100).toFixed(1) + '%';
+      if (calMeterPct) calMeterPct.textContent = Math.round(progress * 100) + '%';
+
+      calSpreadHist.push(spread);
+      if (calSpreadHist.length > 10) calSpreadHist.shift();
+      const spreadStd = stdDevRing(calSpreadHist);
+      const nearMax = spread >= 0.87 * calSessionMaxSpread && calSessionMaxSpread > 0.08;
+      const stable = calSpreadHist.length >= 5 && spreadStd < CAL_SPREAD_STABLE;
+
+      if (nearMax && stable && calLowLightFrames <= 90) {
+        calStableAccumMs += dt * 1000;
+        calStatus.className = 'cal-status cal-hint-ok';
+        calStatus.textContent = '✅ Great — hold steady';
+        calMeterFill.classList.add('cal-meter-ready');
+        if (calStableAccumMs >= CAL_AUTO_MS) {
+          runCalCapture(lm);
+        }
+      } else {
+        calStableAccumMs = 0;
+        calMeterFill.classList.remove('cal-meter-ready');
+        if (calLowLightFrames <= 90) {
+          calStatus.className = 'cal-status';
+          calStatus.textContent = 'Spread your index and pinky wider to fill the bar';
+        }
+      }
+    } else if (calStep === 1) {
+      calSessionMinPinch = Math.min(calSessionMinPinch, pinch);
+      const denom = Math.max(cal.openMax - calSessionMinPinch, 0.02);
+      const fill = denom > 0 ? Math.min(1, (cal.openMax - pinch) / denom) : 0;
+      calMeterFill.style.width = (fill * 100).toFixed(1) + '%';
+      if (calMeterPct) calMeterPct.textContent = Math.round(fill * 100) + '%';
+
+      calPinchHist.push(pinch);
+      if (calPinchHist.length > 10) calPinchHist.shift();
+      const pStd = stdDevRing(calPinchHist);
+      const nearMin = pinch <= calSessionMinPinch * 1.08 && calSessionMinPinch < 0.13;
+      const stable = calPinchHist.length >= 5 && pStd < CAL_PINCH_STABLE;
+
+      if (nearMin && stable && calLowLightFrames <= 90) {
+        calStableAccumMs += dt * 1000;
+        calStatus.className = 'cal-status cal-hint-ok';
+        calStatus.textContent = '✅ Great — hold steady';
+        calMeterFill.classList.add('cal-meter-ready');
+        if (calStableAccumMs >= CAL_AUTO_MS) {
+          runCalCapture(lm);
+        }
+      } else {
+        calStableAccumMs = 0;
+        calMeterFill.classList.remove('cal-meter-ready');
+        if (calLowLightFrames <= 90) {
+          calStatus.className = 'cal-status';
+          calStatus.textContent = 'Pinch thumb and index together tightly';
+        }
+      }
+    } else {
+      calCurveHist.push(curve);
+      if (calCurveHist.length > 12) calCurveHist.shift();
+      const mean = calCurveHist.reduce(function (a, b) {
+        return a + b;
+      }, 0) / Math.max(1, calCurveHist.length);
+      const cStd = stdDevRing(calCurveHist);
+      const progress = Math.min(1, 1 - Math.min(1, cStd / 0.35));
+      calMeterFill.style.width = (progress * 100).toFixed(1) + '%';
+      if (calMeterPct) calMeterPct.textContent = Math.round(progress * 100) + '%';
+
+      const stable = calCurveHist.length >= 6 && cStd < CAL_CURVE_STABLE;
+      if (stable && calLowLightFrames <= 90) {
+        calStableAccumMs += dt * 1000;
+        calStatus.className = 'cal-status cal-hint-ok';
+        calStatus.textContent = '✅ Great — hold steady';
+        calMeterFill.classList.add('cal-meter-ready');
+        if (calStableAccumMs >= CAL_AUTO_MS) {
+          runCalCapture(lm);
+        }
+      } else {
+        calStableAccumMs = 0;
+        calMeterFill.classList.remove('cal-meter-ready');
+        if (calLowLightFrames <= 90) {
+          calStatus.className = 'cal-status';
+          calStatus.textContent = 'Relax — keep your hand calm and natural';
+        }
+      }
+    }
+  }
+
   function onResults(results) {
     const list = results.multiHandLandmarks;
     const handCount = list ? list.length : 0;
@@ -1197,10 +1777,12 @@
 
     if (handCount > 0) {
       order = sortHandsPitchThenVolume(list);
-      pitchHandLandmarks = list[order[0]];
+      const pi = pitchHandOrderIndex(order, handCount);
+      const vi = volHandOrderIndex(order, handCount);
+      pitchHandLandmarks = list[pi];
       pitchLm8 = pitchHandLandmarks[8];
-      if (handCount >= 2) {
-        volHandLandmarks = list[order[1]];
+      if (handCount >= 2 && vi >= 0) {
+        volHandLandmarks = list[vi];
         volLm8 = volHandLandmarks[8];
       }
     }
@@ -1245,36 +1827,20 @@
         pitchHandLandmarks &&
         Math.abs(smoothPitchNormX - learnTargetX) < LEARN_ALIGN_THRESH);
     drawFingerDots(pitchLm8, volLm8, handCount, list, order, learnAligned);
-  }
 
-  let calStep = 0;
-
-  function setCalInstruction() {
-    const texts = [
-      'Step 1/3: Open your pitch hand wide (spread index and pinky), then tap Capture.',
-      'Step 2/3: Pinch thumb and index together, then Capture.',
-      'Step 3/3: Relax your hand to a neutral curve, then Capture.'
-    ];
-    calInstruction.textContent = texts[calStep] || '';
-  }
-
-  function finishCalibration() {
-    try {
-      localStorage.setItem('thereminCalDone', '1');
-      saveCalToStorage();
-    } catch (_) {}
-    calOverlay.classList.add('hidden');
-    btnStart.disabled = false;
-  }
-
-  function openCalibration() {
-    calStep = 0;
-    setCalInstruction();
-    calOverlay.classList.remove('hidden');
-    btnStart.disabled = true;
+    if (calOverlay && !calOverlay.classList.contains('hidden')) {
+      if (pitchHandLandmarks) {
+        drawCalibrationSkeleton(pitchHandLandmarks);
+      } else if (calCtx && calCanvas) {
+        resizeCalCanvas();
+        calCtx.clearRect(0, 0, calCanvas.width, calCanvas.height);
+      }
+      processCalibrationFrame(pitchHandLandmarks, handCount);
+    }
   }
 
   loadCalFromStorage();
+  if (calLeftHanded) calLeftHanded.checked = !!cal.leftHanded;
 
   function maybeShowCalibrationOnLoad() {
     try {
@@ -1290,27 +1856,21 @@
   calCapture.addEventListener('click', function () {
     const lm = lastPitchLandmarks;
     if (!lm || !lm[8]) {
-      calInstruction.textContent = 'Show your pitch hand in view, then Capture again.';
+      calStatus.className = 'cal-status cal-hint-warn';
+      calStatus.textContent = 'Show your pitch hand in the frame';
       return;
     }
-    if (calStep === 0) {
-      cal.spreadMax = Math.max(cal.spreadMin + 0.04, spreadIndexPinkyRaw(lm));
-      cal.openMax = Math.max(cal.openMin + 0.02, pinchOpennessRaw(lm));
-      calStep = 1;
-      setCalInstruction();
-    } else if (calStep === 1) {
-      cal.openMin = Math.max(0.01, Math.min(pinchOpennessRaw(lm), cal.openMax - 0.02));
-      cal.spreadMin = Math.max(0.01, Math.min(spreadIndexPinkyRaw(lm), cal.spreadMax - 0.03));
-      calStep = 2;
-      setCalInstruction();
-    } else {
-      cal.curvatureBaseline = fingerCurvatureAvg(lm);
-      finishCalibration();
-    }
+    runCalCapture(lm);
   });
 
-  calSkip.addEventListener('click', function () {
+  calDefault.addEventListener('click', function () {
     finishCalibration();
+  });
+
+  calLeftHanded.addEventListener('change', function () {
+    cal.leftHanded = !!calLeftHanded.checked;
+    saveCalToStorage();
+    updateCalStepUI();
   });
 
   btnRecalibrate.addEventListener('click', function () {
@@ -1346,11 +1906,19 @@
 
   video.addEventListener('loadeddata', function () {
     resizeCanvas();
+    syncCalVideoStream();
+    resizeCalCanvas();
   });
 
-  camera.start().catch(function (err) {
-    handLine.textContent = 'Camera error: ' + (err && err.message ? err.message : String(err));
-  });
+  camera
+    .start()
+    .then(function () {
+      syncCalVideoStream();
+      resizeCalCanvas();
+    })
+    .catch(function (err) {
+      handLine.textContent = 'Camera error: ' + (err && err.message ? err.message : String(err));
+    });
 })();
   </script>
 </body>
