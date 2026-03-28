@@ -275,9 +275,17 @@
   'use strict';
 
   /*
-   * Two-hand theremin: pitch uses avg Y of MCP joints (5,9,13); exponential pitch curve.
-   * Velocity-based smoothing + dead zone on pitch / volume Y / openness; Web Audio ramps on freq & gain.
+   * Pipeline (real-time, single MediaPipe onResults loop — no React / no duplicate rAF):
+   *   Camera → Hands → onResults → applyAudioFromHands (REAL landmarks only; never ghost/learn state)
+   *         → main osc + gain → destination
+   *   Learn mode: updateLearnPlayback (ghostY + optional guide osc) runs after audio mapping; visual only
+   *   for alignment overlay — does not branch out of applyAudioFromHands and does not mute the theremin.
    */
+
+  // Dev-only: localStorage.setItem('thereminDebug','1') then reload — throttled console pipeline logs.
+  const DEBUG_PIPELINE =
+    typeof localStorage !== 'undefined' && localStorage.getItem('thereminDebug') === '1';
+  let debugFrameCounter = 0;
 
   // C major (multiple octaves) — used when “C Major Lock” snaps continuous pitch to nearest note.
   const scale = [
@@ -291,17 +299,22 @@
   const STABLE_Y_IDS = [5, 9, 13];
 
   function avgStableY(landmarks) {
-    return (
-      landmarks[STABLE_Y_IDS[0]].y +
-      landmarks[STABLE_Y_IDS[1]].y +
-      landmarks[STABLE_Y_IDS[2]].y
-    ) / 3;
+    if (!landmarks || !landmarks[STABLE_Y_IDS[2]]) return 0.5;
+    const y =
+      (landmarks[STABLE_Y_IDS[0]].y +
+        landmarks[STABLE_Y_IDS[1]].y +
+        landmarks[STABLE_Y_IDS[2]].y) /
+      3;
+    if (!Number.isFinite(y)) return 0.5;
+    return Math.min(1, Math.max(0, y));
   }
 
   // curve = (1-y)^2 → freq = 200 + curve * 1000 (always; snapping is optional)
   function continuousFreqFromY(yNorm) {
-    const curve = Math.pow(1 - yNorm, 2);
-    return PITCH_MIN + curve * (PITCH_MAX - PITCH_MIN);
+    const y = Number.isFinite(yNorm) ? Math.min(1, Math.max(0, yNorm)) : 0.5;
+    const curve = Math.pow(1 - y, 2);
+    const hz = PITCH_MIN + curve * (PITCH_MAX - PITCH_MIN);
+    return Number.isFinite(hz) ? hz : PITCH_MIN;
   }
 
   // Ghost Y from Hz (linear inverse of 200–1200 span): y = 1 - (freq - 200) / 1000
@@ -342,6 +355,7 @@
   const GUIDE_FREQ_RAMP_S = 0.16;
 
   function snapToScale(freq, scaleArr) {
+    if (!Number.isFinite(freq)) return scaleArr[0];
     let closest = scaleArr[0];
     let minDiff = Math.abs(freq - closest);
     for (let note of scaleArr) {
@@ -381,12 +395,14 @@
 
   /** @param {Array<{x:number,y:number,z?:number}>} landmarks */
   function handOpennessNormalized(landmarks) {
+    if (!landmarks || !landmarks[20]) return 0;
     const palm = landmarks[0];
     let sum = 0;
     for (let i = 0; i < FINGERTIP_IDS.length; i++) {
       sum += euclid2d(palm, landmarks[FINGERTIP_IDS[i]]);
     }
     const avg = sum / FINGERTIP_IDS.length;
+    if (!Number.isFinite(avg)) return 0;
     const t = (avg - OPEN_DIST_MIN) / (OPEN_DIST_MAX - OPEN_DIST_MIN);
     return Math.min(1, Math.max(0, t));
   }
@@ -406,10 +422,14 @@
   const GAIN_FADE_OUT_S = 0.1;
 
   function adaptiveSmooth(prevRaw, currRaw, smooth) {
+    if (!Number.isFinite(currRaw) || !Number.isFinite(prevRaw)) {
+      return Number.isFinite(smooth) ? smooth : 0.5;
+    }
     const vel = Math.abs(currRaw - prevRaw);
     const input = vel < DEAD_ZONE ? prevRaw : currRaw;
     const alpha = vel > VELOCITY_THRESH ? ALPHA_FAST : ALPHA_SLOW;
-    return smooth * (1 - alpha) + input * alpha;
+    const out = smooth * (1 - alpha) + input * alpha;
+    return Number.isFinite(out) ? Math.min(1, Math.max(0, out)) : smooth;
   }
 
   /** @type {AudioContext | null} */
@@ -651,6 +671,10 @@
     });
   });
 
+  /**
+   * Maps REAL hand landmarks only (ghostY / learnTargetY / learnMode must never affect this path).
+   * Learn mode adds visuals + guide oscillator after this runs in onResults.
+   */
   function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks) {
     const scaleLock = scaleLockEl.checked;
 
@@ -686,7 +710,8 @@
 
     const continuousHz = continuousFreqFromY(smoothPitchY);
     const centerHz = continuousHz + smoothOpen * OPEN_PITCH_HZ;
-    const targetPitchHz = scaleLock ? snapToScale(centerHz, scale) : centerHz;
+    let targetPitchHz = scaleLock ? snapToScale(centerHz, scale) : centerHz;
+    if (!Number.isFinite(targetPitchHz)) targetPitchHz = PITCH_MIN;
     freqLine.textContent =
       'Frequency: ' +
       targetPitchHz.toFixed(2) +
@@ -705,13 +730,15 @@
       audioCtx.resume().catch(function () {});
     }
 
+    const volClamped = Number.isFinite(smoothVol) ? Math.min(1, Math.max(0, smoothVol)) : 0;
     // With two hands, volume is the second hand’s height; if that hand sits low, gain → 0 (silent).
     // Floor keeps the theremin audible while still allowing the volume hand to go quiet near the bottom.
-    const gainVol = handCount >= 2 ? Math.max(0.14, smoothVol) : smoothVol;
+    const gainVol = handCount >= 2 ? Math.max(0.14, volClamped) : volClamped;
 
     const now = audioCtx.currentTime;
     const vibrato = Math.sin(now * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
-    const finalHz = targetPitchHz + vibrato;
+    let finalHz = targetPitchHz + vibrato;
+    if (!Number.isFinite(finalHz)) finalHz = targetPitchHz;
     const pitchRampS = scaleLock ? AUDIO_RAMP_PITCH_SNAP_S : AUDIO_RAMP_S;
 
     if (handsLost) {
@@ -899,6 +926,19 @@
     }
 
     applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks);
+
+    if (DEBUG_PIPELINE) {
+      debugFrameCounter++;
+      if (debugFrameCounter % 45 === 0) {
+        console.log('HAND:', { handCount, hasPitch: !!pitchHandLandmarks, hasVol: !!volHandLandmarks });
+        console.log('FEATURES:', {
+          smoothPitchY: Number(smoothPitchY).toFixed(4),
+          smoothVol: Number(smoothVol).toFixed(4),
+          smoothOpen: Number(smoothOpen).toFixed(4)
+        });
+        console.log('AUDIO STATE:', audioCtx ? audioCtx.state : 'no-context', 'audioRunning:', audioRunning);
+      }
+    }
 
     if (learnModeActive && currentSong) {
       updateLearnPlayback();
