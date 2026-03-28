@@ -47,20 +47,23 @@
     }
     #controls {
       position: absolute;
-      top: 1rem;
       right: 1rem;
-      bottom: auto;
+      bottom: 1rem;
+      top: auto;
       left: auto;
       z-index: 2;
       pointer-events: none;
-      max-width: min(100% - 2rem, 16rem);
+      max-width: min(100% - 2rem, 36rem);
     }
     .controls-panel {
       pointer-events: auto;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
       gap: 0.5rem;
-      padding: 0.65rem;
+      padding: 0.55rem 0.65rem;
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       background: rgba(14, 14, 24, 0.72);
@@ -72,7 +75,8 @@
     .controls-row {
       display: flex;
       gap: 0.45rem;
-      justify-content: flex-end;
+      align-items: center;
+      flex-shrink: 0;
     }
     #controls button,
     #controls label {
@@ -110,14 +114,14 @@
       border: 1px solid rgba(255, 255, 255, 0.25);
       background: rgba(20, 20, 35, 0.85);
       font-size: 0.85rem;
+      flex-shrink: 0;
     }
     .control-field-label {
       flex-shrink: 0;
       color: rgba(232, 232, 240, 0.92);
     }
     .control-field select {
-      flex: 1;
-      min-width: 0;
+      min-width: 5.5rem;
       padding: 0.4rem 0.55rem;
       border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -135,6 +139,7 @@
       background: rgba(20, 20, 35, 0.85);
       font-size: 0.85rem;
       user-select: none;
+      flex-shrink: 0;
     }
     .toggle .lock-icon {
       flex-shrink: 0;
