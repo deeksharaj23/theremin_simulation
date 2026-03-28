@@ -119,7 +119,7 @@
       <div id="volLine">Volume: —</div>
       <div id="handLine">Hand: —</div>
     </div>
-    <p id="hint">Raise your index finger · up = higher pitch · right = louder</p>
+    <p id="hint">Two hands: right = pitch (green) · left = volume (blue) · one hand = pitch only</p>
     <div id="controls">
       <button type="button" id="btnStart">Start</button>
       <button type="button" id="btnStop" disabled>Stop</button>
@@ -143,11 +143,12 @@
   'use strict';
 
   /*
-   * Mapping (landmark 8 = index fingertip, normalized x,y in [0,1]):
-   * - Pitch: vertical position — smaller y (hand higher) => higher Hz, range 200–1200 (or C-major table).
-   * - Volume: horizontal x => gain 0–1 (left quiet, right loud).
-   * Smoothing: each frame, smoothed = previous * 0.8 + current * 0.2 (freq and vol).
-   * Audio: OscillatorNode + GainNode; context/oscillator start only after "Start" (user gesture).
+   * Two-hand theremin (mirrored video): wrist x sorts hands — smaller raw x = further right on screen.
+   * - Rightmost hand → pitch (landmark 8 y → 200–1200 Hz or C-major).
+   * - Leftmost hand → volume (landmark 8 y, inverted: higher hand = louder).
+   * - One hand only → pitch from that hand; volume target fixed at 0.5.
+   * Smoothing: pitch and volume each use smooth = prev*0.8 + current*0.2.
+   * Audio: OscillatorNode + GainNode; start only after "Start".
    */
 
   // --- Pitch mapping: C major frequencies in ~200–1200 Hz (scale lock) ---
@@ -170,9 +171,20 @@
     return PITCH_MIN + t * (PITCH_MAX - PITCH_MIN);
   }
 
-  // Mapping: horizontal x — 0 = silent side, 1 = full volume.
-  function xToRawVolume(xNorm) {
-    return Math.min(1, Math.max(0, xNorm));
+  // Volume hand: Y-axis inverted — top of frame (y→0) = louder, bottom (y→1) = quieter.
+  function yToRawVolume(yNorm) {
+    return Math.min(1, Math.max(0, 1 - yNorm));
+  }
+
+  const VOLUME_SINGLE_HAND = 0.5;
+
+  // Sort hand indices by wrist (0) x ascending: first = rightmost on mirrored display = pitch.
+  function sortHandsPitchThenVolume(landmarksList) {
+    const idx = landmarksList.map(function (_, i) { return i; });
+    idx.sort(function (a, b) {
+      return landmarksList[a][0].x - landmarksList[b][0].x;
+    });
+    return idx;
   }
 
   // Smoothing: smooth = prev * 0.8 + current * 0.2 (applied to frequency and volume targets).
@@ -256,15 +268,20 @@
   btnStart.addEventListener('click', startAudio);
   btnStop.addEventListener('click', stopAudio);
 
-  function applyAudioFromLandmark(lm8, handDetected) {
+  function applyAudioFromHands(pitchLm8, volLm8, handCount) {
     const scaleLock = scaleLockEl.checked;
     let targetFreq = smoothFreq;
     let targetVol = 0;
 
-    if (handDetected && lm8) {
-      // Landmark 8: index finger tip — x,y normalized 0–1
-      targetFreq = yToRawPitchHz(lm8.y, scaleLock);
-      targetVol = xToRawVolume(lm8.x);
+    if (handCount === 0) {
+      targetFreq = smoothFreq;
+      targetVol = 0;
+    } else if (handCount === 1 && pitchLm8) {
+      targetFreq = yToRawPitchHz(pitchLm8.y, scaleLock);
+      targetVol = VOLUME_SINGLE_HAND;
+    } else if (handCount >= 2 && pitchLm8 && volLm8) {
+      targetFreq = yToRawPitchHz(pitchLm8.y, scaleLock);
+      targetVol = yToRawVolume(volLm8.y);
     }
 
     smoothFreq = smoothFreq * SMOOTH_PREV + targetFreq * SMOOTH_CUR;
@@ -280,19 +297,15 @@
     gainNode.gain.setValueAtTime(smoothVol, t);
   }
 
-  function drawFingerDot(lm8, handDetected) {
+  function drawFingerDotAt(lm8, glowInner, glowMid, core) {
     const w = canvas.width;
     const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    if (!handDetected || !lm8) return;
-
-    // Mirror x to match mirrored video
     const px = (1 - lm8.x) * w;
     const py = lm8.y * h;
 
     const glow = ctx.createRadialGradient(px, py, 0, px, py, 28);
-    glow.addColorStop(0, 'rgba(120, 255, 255, 0.95)');
-    glow.addColorStop(0.35, 'rgba(80, 200, 255, 0.4)');
+    glow.addColorStop(0, glowInner);
+    glow.addColorStop(0.35, glowMid);
     glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
     ctx.fillStyle = glow;
@@ -300,23 +313,63 @@
     ctx.arc(px, py, 28, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(200, 255, 255, 0.95)';
+    ctx.fillStyle = core;
     ctx.beginPath();
     ctx.arc(px, py, 8, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  function onResults(results) {
-    const handDetected = !!(results.multiHandLandmarks && results.multiHandLandmarks.length);
-    handLine.textContent = handDetected ? 'Hand: detected' : 'Hand: none (muted)';
+  function drawFingerDots(pitchLm8, volLm8, handCount) {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (handCount === 0) return;
 
-    let lm8 = null;
-    if (handDetected) {
-      lm8 = results.multiHandLandmarks[0][8];
+    if (pitchLm8) {
+      drawFingerDotAt(
+        pitchLm8,
+        'rgba(80, 255, 140, 0.95)',
+        'rgba(40, 200, 100, 0.45)',
+        'rgba(160, 255, 180, 0.95)'
+      );
+    }
+    if (handCount >= 2 && volLm8) {
+      drawFingerDotAt(
+        volLm8,
+        'rgba(100, 180, 255, 0.95)',
+        'rgba(60, 120, 255, 0.45)',
+        'rgba(180, 220, 255, 0.95)'
+      );
+    }
+  }
+
+  function onResults(results) {
+    const list = results.multiHandLandmarks;
+    const handCount = list ? list.length : 0;
+
+    let pitchLm8 = null;
+    let volLm8 = null;
+
+    if (handCount > 0) {
+      const order = sortHandsPitchThenVolume(list);
+      const pitchHand = list[order[0]];
+      pitchLm8 = pitchHand[8];
+      if (handCount >= 2) {
+        const volHand = list[order[1]];
+        volLm8 = volHand[8];
+      }
     }
 
-    applyAudioFromLandmark(lm8, handDetected);
-    drawFingerDot(lm8, handDetected);
+    if (handCount === 0) {
+      handLine.textContent = 'Hands: none (muted)';
+    } else if (handCount === 1) {
+      handLine.textContent = 'Hands: 1 — pitch only, volume fixed at 0.5';
+    } else {
+      handLine.textContent = 'Hands: 2 — green pitch · blue volume';
+    }
+
+    applyAudioFromHands(pitchLm8, volLm8, handCount);
+    drawFingerDots(pitchLm8, volLm8, handCount);
   }
 
   const hands = new Hands({
@@ -325,7 +378,7 @@
     }
   });
   hands.setOptions({
-    maxNumHands: 1,
+    maxNumHands: 2,
     modelComplexity: 1,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5
