@@ -230,7 +230,7 @@
       <div id="handLine">Hand: —</div>
       <div id="openLine">Open: —</div>
     </div>
-    <p id="hint">Two hands: right = pitch (green) · left = volume (blue) · one hand = pitch only</p>
+    <p id="hint">Two hands: right = pitch (green), left = volume (blue) — raise your left hand higher for louder. One hand: pitch only, volume fixed at half.</p>
     <div id="learn-wrap">
       <button type="button" id="btnLearn">Learn to play</button>
       <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
@@ -577,6 +577,7 @@
   }
 
   // Audio setup: one oscillator into a gain node; no sound until Start (unlocks AudioContext).
+  // Resume the context before osc.start() — some Safari/iOS builds stay silent if started while suspended.
   async function startAudio() {
     if (audioRunning) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -589,12 +590,12 @@
     osc.frequency.value = scaleLockEl.checked ? snapToScale(center0, scale) : center0;
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
-    osc.start();
     if (audioCtx.state === 'suspended') {
       try {
         await audioCtx.resume();
       } catch (_) {}
     }
+    osc.start();
     audioRunning = true;
     btnStart.disabled = true;
     btnStop.disabled = false;
@@ -700,6 +701,14 @@
 
     if (!audioRunning || !audioCtx || !osc || !gainNode) return;
 
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
+    }
+
+    // With two hands, volume is the second hand’s height; if that hand sits low, gain → 0 (silent).
+    // Floor keeps the theremin audible while still allowing the volume hand to go quiet near the bottom.
+    const gainVol = handCount >= 2 ? Math.max(0.14, smoothVol) : smoothVol;
+
     const now = audioCtx.currentTime;
     const vibrato = Math.sin(now * VIBRATO_RATE) * smoothOpen * VIBRATO_DEPTH_MAX;
     const finalHz = targetPitchHz + vibrato;
@@ -712,7 +721,7 @@
     } else if (handCount > 0) {
       gainNode.gain.cancelScheduledValues(now);
       gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-      gainNode.gain.linearRampToValueAtTime(smoothVol, now + AUDIO_RAMP_S);
+      gainNode.gain.linearRampToValueAtTime(gainVol, now + AUDIO_RAMP_S);
     }
 
     osc.frequency.cancelScheduledValues(now);
@@ -917,7 +926,11 @@
 
   const camera = new Camera(video, {
     onFrame: async function () {
-      await hands.send({ image: video });
+      try {
+        await hands.send({ image: video });
+      } catch (e) {
+        handLine.textContent = 'Hands error: ' + (e && e.message ? e.message : String(e));
+      }
     },
     width: 1280,
     height: 720
