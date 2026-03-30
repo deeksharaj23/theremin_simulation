@@ -613,6 +613,7 @@
       <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
         <button type="button" class="learn-song" data-song="sargam">Sa Re Ga Ma Pa</button>
         <button type="button" class="learn-song" data-song="birthday">Happy Birthday</button>
+        <button type="button" class="learn-song" data-song="comfortablyNumb">Comfortably Numb</button>
       </div>
       <button type="button" id="btnExitLearn" class="hidden" aria-label="Exit learn mode">Exit Learn Mode</button>
       <div id="learn-banner" class="learn-banner hidden" role="status">Follow the guides to play</div>
@@ -845,6 +846,33 @@
     C: 261.63, D: 293.66, E: 329.63, F: 349.23, G: 392.0, A: 440.0, B: 493.88
   };
 
+  /** @param {string} name e.g. D5, F#4, B4, or legacy C */
+  function parseNoteToMidi(name) {
+    const m = name.match(/^([A-G])([#b]?)(\d)$/);
+    if (!m) return 60;
+    const acc = m[2] || '';
+    const octave = parseInt(m[3], 10);
+    const chrom = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let s = chrom[m[1]];
+    if (acc === '#') s += 1;
+    if (acc === 'b') s -= 1;
+    return (octave + 1) * 12 + s;
+  }
+
+  function hzFromMidi(midi) {
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  /** Natural letter = middle-register reference in NOTE_FREQ; with octave = exact pitch. */
+  function hzFromNoteName(name) {
+    if (!name || typeof name !== 'string') return NOTE_FREQ.C;
+    if (/^[A-G][#b]?\d$/.test(name)) {
+      return hzFromMidi(parseNoteToMidi(name));
+    }
+    if (NOTE_FREQ[name]) return NOTE_FREQ[name];
+    return NOTE_FREQ.C;
+  }
+
   /** @typedef {{ n: string, d: number, v?: number }} SongRawNote */
   /** @type {Record<string, SongRawNote[]>} */
   const SONGS_RAW = {
@@ -857,6 +885,85 @@
       { n: 'F', d: 700, v: 0.62 }, { n: 'E', d: 800, v: 0.6 },
       { n: 'C', d: 420, v: 0.58 }, { n: 'C', d: 200, v: 0.58 }, { n: 'D', d: 700, v: 0.6 }, { n: 'C', d: 700, v: 0.58 },
       { n: 'G', d: 700, v: 0.64 }, { n: 'F', d: 1000, v: 0.6 }
+    ],
+    /**
+     * Comfortably Numb (Pink Floyd) — from piano arr., ~60 BPM (q=1000 ms), B minor.
+     * Intro (p) + verse (mf) + opening chorus (f); simplified vs full score for learn mode.
+     */
+    comfortablyNumb: [
+      { n: 'B4', d: 4000, v: 0.34 },
+      { n: 'B4', d: 4000, v: 0.34 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'E5', d: 250, v: 0.62 },
+      { n: 'F#5', d: 500, v: 0.62 },
+      { n: 'E5', d: 500, v: 0.62 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'C#5', d: 250, v: 0.62 },
+      { n: 'B4', d: 2000, v: 0.62 },
+      { n: 'B4', d: 4000, v: 0.62 },
+      { n: 'B4', d: 500, v: 0.62 },
+      { n: 'A4', d: 500, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'G4', d: 2000, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'B4', d: 500, v: 0.62 },
+      { n: 'A4', d: 250, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'F#4', d: 500, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'F#4', d: 500, v: 0.62 },
+      { n: 'F#4', d: 1000, v: 0.62 },
+      { n: 'B4', d: 4000, v: 0.62 },
+      { n: 'E5', d: 750, v: 0.62 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'E5', d: 500, v: 0.62 },
+      { n: 'D5', d: 500, v: 0.62 },
+      { n: 'E5', d: 750, v: 0.62 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'E5', d: 1000, v: 0.62 },
+      { n: 'D5', d: 4000, v: 0.62 },
+      { n: 'B4', d: 500, v: 0.62 },
+      { n: 'A4', d: 500, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'G4', d: 2000, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'B4', d: 500, v: 0.62 },
+      { n: 'A4', d: 250, v: 0.62 },
+      { n: 'G4', d: 250, v: 0.62 },
+      { n: 'F#4', d: 500, v: 0.62 },
+      { n: 'G4', d: 500, v: 0.62 },
+      { n: 'F#4', d: 500, v: 0.62 },
+      { n: 'F#4', d: 1000, v: 0.62 },
+      { n: 'B4', d: 4000, v: 0.62 },
+      { n: 'E5', d: 750, v: 0.62 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'E5', d: 500, v: 0.62 },
+      { n: 'D5', d: 500, v: 0.62 },
+      { n: 'E5', d: 750, v: 0.62 },
+      { n: 'D5', d: 250, v: 0.62 },
+      { n: 'E5', d: 1000, v: 0.62 },
+      { n: 'D5', d: 4000, v: 0.62 },
+      { n: 'B5', d: 4000, v: 0.9 },
+      { n: 'A5', d: 4000, v: 0.9 },
+      { n: 'G5', d: 4000, v: 0.9 },
+      { n: 'D5', d: 4000, v: 0.9 },
+      { n: 'B5', d: 1000, v: 0.9 },
+      { n: 'B5', d: 1000, v: 0.9 },
+      { n: 'B5', d: 1000, v: 0.9 },
+      { n: 'B5', d: 1000, v: 0.9 },
+      { n: 'A5', d: 1000, v: 0.9 },
+      { n: 'A5', d: 1000, v: 0.9 },
+      { n: 'A5', d: 1000, v: 0.9 },
+      { n: 'A5', d: 1000, v: 0.9 },
+      { n: 'G5', d: 1000, v: 0.9 },
+      { n: 'G5', d: 1000, v: 0.9 },
+      { n: 'G5', d: 1000, v: 0.9 },
+      { n: 'G5', d: 1000, v: 0.9 },
+      { n: 'D5', d: 4000, v: 0.88 }
     ]
   };
 
@@ -865,7 +972,7 @@
     const raw = SONGS_RAW[songId];
     if (!raw) return [];
     return raw.map(function (r) {
-      const hz = NOTE_FREQ[r.n];
+      const hz = hzFromNoteName(r.n);
       return {
         pitch: normXFromHz(hz),
         volume: r.v != null ? r.v : 0.62,
