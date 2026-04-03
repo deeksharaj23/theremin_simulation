@@ -1466,6 +1466,20 @@
     const bothCorrect = handCount >= 2 && isPitchCorrect && isVolumeCorrect;
     learnIsMatched = bothCorrect;
 
+    const userPitch = smoothPitchNormX;
+    const userVolume = smoothVol;
+    console.log({
+      userPitch: userPitch,
+      targetPitch: targetPitch,
+      pitchDiff: Math.abs(userPitch - targetPitch),
+      userVolume: userVolume,
+      targetVolume: note.volume,
+      volumeDiff: Math.abs(userVolume - note.volume),
+      isPitchCorrect: isPitchCorrect,
+      isVolumeCorrect: isVolumeCorrect,
+      isCorrect: bothCorrect
+    });
+
     if (isPitchCorrect && !learnPrevPitchMatched) {
       learnPitchMatchScaleUntilMs = nowMs + LEARN_MATCH_SCALE_MS;
       learnPitchFillFlashUntilMs = nowMs + 150;
