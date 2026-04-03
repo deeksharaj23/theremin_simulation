@@ -233,19 +233,57 @@
     .learn-banner.hidden {
       display: none;
     }
+    .learn-note-hud {
+      position: absolute;
+      left: 50%;
+      top: 1rem;
+      transform: translateX(-50%);
+      z-index: 100;
+      pointer-events: none;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      text-shadow: 0 0 8px #000, 0 1px 2px #000;
+      opacity: 0.6;
+    }
+    .learn-note-hud.hidden {
+      display: none;
+    }
+    .learn-progress-wrap {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 4px;
+      z-index: 100;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .learn-progress-wrap.hidden {
+      display: none;
+    }
+    .learn-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgb(80, 200, 120) 0%, rgb(100, 170, 255) 100%);
+      transition: width 0.3s ease-out;
+    }
     #btnExitLearn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      z-index: 101;
       touch-action: manipulation;
       pointer-events: auto;
       padding: 0.45rem 0.75rem;
       font-size: 0.8rem;
       border-radius: 10px;
-      border: 1px solid rgba(255, 180, 160, 0.28);
-      background: rgba(36, 22, 28, 0.55);
-      color: rgba(255, 220, 215, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(18, 18, 30, 0.55);
+      color: rgba(240, 240, 248, 0.92);
       cursor: pointer;
     }
     #btnExitLearn:hover {
-      background: rgba(48, 30, 36, 0.68);
+      background: rgba(30, 30, 48, 0.65);
     }
     #btnExitLearn.hidden {
       display: none;
@@ -608,6 +646,11 @@
       </div>
     </aside>
     <p id="hint">Pitch: index X (horizontal line) · right hand = pitch, left = volume · Learn mode: C Major snap on by default</p>
+    <div id="learn-note-hud" class="learn-note-hud hidden" aria-live="polite"></div>
+    <button type="button" id="btnExitLearn" class="hidden" aria-label="Exit learn mode">Exit</button>
+    <div id="learn-progress-wrap" class="learn-progress-wrap hidden" aria-hidden="true">
+      <div id="learn-progress-fill" class="learn-progress-fill"></div>
+    </div>
     <div id="learn-wrap">
       <button type="button" id="btnLearn">Learn to play</button>
       <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
@@ -615,8 +658,7 @@
         <button type="button" class="learn-song" data-song="birthday">Happy Birthday</button>
         <button type="button" class="learn-song" data-song="comfortablyNumb">Comfortably Numb</button>
       </div>
-      <button type="button" id="btnExitLearn" class="hidden" aria-label="Exit learn mode">Exit Learn Mode</button>
-      <div id="learn-banner" class="learn-banner hidden" role="status">Follow the guides to play</div>
+      <div id="learn-banner" class="learn-banner hidden" role="status">Move your hands into the circles to begin</div>
     </div>
     <div id="controls">
       <div class="controls-panel">
@@ -994,12 +1036,27 @@
     });
   }
 
-  const LEARN_PITCH_THRESH = 0.05;
-  const LEARN_VOL_THRESH = 0.08;
-  const LEARN_CLOSE_PITCH = 0.12;
-  const LEARN_CLOSE_VOL = 0.14;
-  const LEARN_GUIDE_LERP = 0.18;
-  const LEARN_WRONG_GAIN = 0.05;
+  const LEARN_PITCH_THRESH = 0.06;
+  const LEARN_VOL_THRESH = 0.15;
+  const LEARN_READY_HOLD_MS = 300;
+  const LEARN_RING_LERP = 0.08;
+  const LEARN_NOTE_TRANSITION_MS = 400;
+  const LEARN_RING_DIAM = 48;
+  const LEARN_RING_R = LEARN_RING_DIAM / 2;
+  const LEARN_RING_BORDER = 3;
+  const LEARN_LINE_MAX_PX = 100;
+  const LEARN_LINE_OPACITY = 0.4;
+  const LEARN_GHOST_OPACITY = 0.15;
+  const LEARN_SKIP_FLASH_MS = 400;
+  const LEARN_MATCH_SCALE_MS = 150;
+  const LEARN_RING_IDLE_PULSE_S = 1.5;
+
+  const LEARN_GREEN = { r: 80, g: 220, b: 130 };
+  const LEARN_BLUE = { r: 100, g: 175, b: 255 };
+
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
 
   function snapToScale(freq, scaleArr) {
     if (!Number.isFinite(freq)) return scaleArr[0];
@@ -1159,10 +1216,28 @@
   /** @type {Array<{ pitch: number, volume: number, duration: number }> | null} */
   let currentSong = null;
   let learnCurrentNoteIndex = 0;
-  let learnNoteStartMs = 0;
-  let learnMatchedAccumMs = 0;
+  let learnIsMatched = false;
+  /** @type {number | null} */
+  let learnMatchStartTime = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let learnAutoAdvanceTimer = null;
+  let learnSequenceStarted = false;
+  /** @type {number | null} */
+  let learnReadyHoldStartMs = null;
   let learnGuidePitch = 0.5;
   let learnGuideVolY = 0.5;
+  /** @type {number} */
+  let learnNoteStartMs = 0;
+  let learnTransitionStartMs = 0;
+  let learnTransFromPitch = 0.5;
+  let learnTransFromVolY = 0.5;
+  let learnSkipFlashUntilMs = 0;
+  let learnPitchMatchScaleUntilMs = 0;
+  let learnVolMatchScaleUntilMs = 0;
+  let learnPitchFillFlashUntilMs = 0;
+  let learnVolFillFlashUntilMs = 0;
+  let learnPrevPitchMatched = false;
+  let learnPrevVolMatched = false;
   let lastLearnUpdateMs = 0;
 
   const video = document.getElementById('video');
@@ -1181,6 +1256,9 @@
   const learnPanel = document.getElementById('learn-panel');
   const learnBanner = document.getElementById('learn-banner');
   const btnExitLearn = document.getElementById('btnExitLearn');
+  const learnNoteHud = document.getElementById('learn-note-hud');
+  const learnProgressWrap = document.getElementById('learn-progress-wrap');
+  const learnProgressFill = document.getElementById('learn-progress-fill');
   const thereminIntro = document.getElementById('theremin-intro');
   const btnThereminIntroToggle = document.getElementById('btnThereminIntroToggle');
   const calOverlay = document.getElementById('calibration-overlay');
@@ -1244,16 +1322,66 @@
     }
   });
 
+  function clearLearnAutoAdvance() {
+    if (learnAutoAdvanceTimer !== null) {
+      clearTimeout(learnAutoAdvanceTimer);
+      learnAutoAdvanceTimer = null;
+    }
+  }
+
+  function updateLearnHudAndProgress() {
+    if (!learnNoteHud || !learnProgressFill || !learnProgressWrap || !currentSong || !currentSong.length) return;
+    if (!learnSequenceStarted) {
+      learnNoteHud.classList.add('hidden');
+      learnProgressFill.style.width = '0%';
+      return;
+    }
+    learnNoteHud.classList.remove('hidden');
+    learnNoteHud.textContent =
+      'Note ' + (learnCurrentNoteIndex + 1) + ' of ' + currentSong.length;
+    const pct = (learnCurrentNoteIndex / currentSong.length) * 100;
+    learnProgressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+  }
+
   function exitLearnMode() {
+    clearLearnAutoAdvance();
     learnModeActive = false;
     currentSong = null;
     learnCurrentNoteIndex = 0;
-    learnMatchedAccumMs = 0;
+    learnIsMatched = false;
+    learnMatchStartTime = null;
+    learnSequenceStarted = false;
+    learnReadyHoldStartMs = null;
+    learnSkipFlashUntilMs = 0;
+    learnTransitionStartMs = 0;
     lastLearnUpdateMs = 0;
+    learnPrevPitchMatched = false;
+    learnPrevVolMatched = false;
+    learnPitchFillFlashUntilMs = 0;
+    learnVolFillFlashUntilMs = 0;
     if (btnLearn) btnLearn.classList.remove('learn-active');
     if (learnPanel) learnPanel.classList.add('hidden');
     if (learnBanner) learnBanner.classList.add('hidden');
     if (btnExitLearn) btnExitLearn.classList.add('hidden');
+    if (learnNoteHud) learnNoteHud.classList.add('hidden');
+    if (learnProgressWrap) learnProgressWrap.classList.add('hidden');
+    if (learnProgressFill) learnProgressFill.style.width = '0%';
+  }
+
+  function scheduleLearnAutoAdvance(noteDurationMs) {
+    clearLearnAutoAdvance();
+    const ms = Math.max(1, noteDurationMs * 3);
+    learnAutoAdvanceTimer = setTimeout(function () {
+      learnAutoAdvanceTimer = null;
+      if (!learnModeActive || !currentSong || !currentSong.length) return;
+      learnSkipFlashUntilMs = performance.now() + LEARN_SKIP_FLASH_MS;
+      learnMatchStartTime = null;
+      learnReadyHoldStartMs = null;
+      setTimeout(function () {
+        if (!learnModeActive) return;
+        advanceLearnNote(performance.now());
+      }, LEARN_SKIP_FLASH_MS);
+    }, ms);
   }
 
   function launchLearn(guidedNotes) {
@@ -1261,26 +1389,55 @@
     learnModeActive = true;
     currentSong = guidedNotes;
     learnCurrentNoteIndex = 0;
-    learnMatchedAccumMs = 0;
+    learnIsMatched = false;
+    learnMatchStartTime = null;
+    learnSequenceStarted = false;
+    learnReadyHoldStartMs = null;
+    learnSkipFlashUntilMs = 0;
+    learnTransitionStartMs = 0;
+    learnPrevPitchMatched = false;
+    learnPrevVolMatched = false;
     const now = performance.now();
     learnNoteStartMs = now;
     lastLearnUpdateMs = now;
     const n0 = guidedNotes[0];
     learnGuidePitch = n0.pitch;
     learnGuideVolY = 1 - n0.volume;
+    learnTransFromPitch = learnGuidePitch;
+    learnTransFromVolY = learnGuideVolY;
     if (btnLearn) btnLearn.classList.add('learn-active');
-    if (learnBanner) learnBanner.classList.remove('hidden');
+    if (learnBanner) {
+      learnBanner.textContent = 'Move your hands into the circles to begin';
+      learnBanner.classList.remove('hidden');
+    }
     if (btnExitLearn) btnExitLearn.classList.remove('hidden');
+    if (learnNoteHud) learnNoteHud.classList.add('hidden');
+    if (learnProgressWrap) learnProgressWrap.classList.remove('hidden');
+    if (learnProgressFill) learnProgressFill.style.width = '0%';
   }
 
   function advanceLearnNote(nowMs) {
+    clearLearnAutoAdvance();
+    learnSkipFlashUntilMs = 0;
+    learnTransFromPitch = learnGuidePitch;
+    learnTransFromVolY = learnGuideVolY;
     learnCurrentNoteIndex++;
-    learnMatchedAccumMs = 0;
+    learnMatchStartTime = null;
+    learnIsMatched = false;
+    learnReadyHoldStartMs = null;
+    learnPrevPitchMatched = false;
+    learnPrevVolMatched = false;
+    learnPitchFillFlashUntilMs = 0;
+    learnVolFillFlashUntilMs = 0;
     if (!currentSong || learnCurrentNoteIndex >= currentSong.length) {
       exitLearnMode();
       return;
     }
     learnNoteStartMs = nowMs;
+    learnTransitionStartMs = nowMs;
+    const note = currentSong[learnCurrentNoteIndex];
+    if (note) scheduleLearnAutoAdvance(note.duration);
+    updateLearnHudAndProgress();
   }
 
   function updateLearnGuided(nowMs, handCount) {
@@ -1288,31 +1445,66 @@
     const note = currentSong[learnCurrentNoteIndex];
     if (!note) return;
 
-    const dt = lastLearnUpdateMs > 0 ? Math.min(0.08, (nowMs - lastLearnUpdateMs) / 1000) : 0.016;
     lastLearnUpdateMs = nowMs;
 
-    const k = LEARN_GUIDE_LERP;
-    learnGuidePitch += (note.pitch - learnGuidePitch) * k;
-    const targetY = 1 - note.volume;
-    learnGuideVolY += (targetY - learnGuideVolY) * k;
+    const targetPitch = note.pitch;
+    const targetVolY = 1 - note.volume;
+
+    if (learnTransitionStartMs > 0) {
+      const tr = Math.min(1, (nowMs - learnTransitionStartMs) / LEARN_NOTE_TRANSITION_MS);
+      const e = easeInOutCubic(tr);
+      learnGuidePitch = learnTransFromPitch + (targetPitch - learnTransFromPitch) * e;
+      learnGuideVolY = learnTransFromVolY + (targetVolY - learnTransFromVolY) * e;
+      if (tr >= 1) learnTransitionStartMs = 0;
+    } else {
+      learnGuidePitch += (targetPitch - learnGuidePitch) * LEARN_RING_LERP;
+      learnGuideVolY += (targetVolY - learnGuideVolY) * LEARN_RING_LERP;
+    }
 
     const isPitchCorrect = Math.abs(smoothPitchNormX - note.pitch) < LEARN_PITCH_THRESH;
     const isVolumeCorrect = Math.abs(smoothVol - note.volume) < LEARN_VOL_THRESH;
-    const isCorrect = handCount >= 2 && isPitchCorrect && isVolumeCorrect;
+    const bothCorrect = handCount >= 2 && isPitchCorrect && isVolumeCorrect;
+    learnIsMatched = bothCorrect;
 
-    if (isCorrect) {
-      learnMatchedAccumMs += dt * 1000;
-      if (learnMatchedAccumMs >= note.duration) {
-        advanceLearnNote(nowMs);
-        return;
+    if (isPitchCorrect && !learnPrevPitchMatched) {
+      learnPitchMatchScaleUntilMs = nowMs + LEARN_MATCH_SCALE_MS;
+      learnPitchFillFlashUntilMs = nowMs + 150;
+    }
+    if (isVolumeCorrect && !learnPrevVolMatched) {
+      learnVolMatchScaleUntilMs = nowMs + LEARN_MATCH_SCALE_MS;
+      learnVolFillFlashUntilMs = nowMs + 150;
+    }
+    learnPrevPitchMatched = isPitchCorrect;
+    learnPrevVolMatched = isVolumeCorrect;
+
+    if (!learnSequenceStarted) {
+      if (bothCorrect) {
+        if (learnReadyHoldStartMs === null) learnReadyHoldStartMs = nowMs;
+        if (nowMs - learnReadyHoldStartMs >= LEARN_READY_HOLD_MS) {
+          learnSequenceStarted = true;
+          learnReadyHoldStartMs = null;
+          learnMatchStartTime = null;
+          learnNoteStartMs = nowMs;
+          learnTransitionStartMs = 0;
+          learnTransFromPitch = learnGuidePitch;
+          learnTransFromVolY = learnGuideVolY;
+          if (learnBanner) learnBanner.classList.add('hidden');
+          updateLearnHudAndProgress();
+          scheduleLearnAutoAdvance(note.duration);
+        }
+      } else {
+        learnReadyHoldStartMs = null;
       }
-    } else {
-      learnMatchedAccumMs = 0;
+      return;
     }
 
-    const elapsed = nowMs - learnNoteStartMs;
-    if (elapsed > 2 * note.duration) {
-      advanceLearnNote(nowMs);
+    if (bothCorrect) {
+      if (learnMatchStartTime === null) learnMatchStartTime = nowMs;
+      if (nowMs - learnMatchStartTime >= note.duration) {
+        advanceLearnNote(nowMs);
+      }
+    } else {
+      learnMatchStartTime = null;
     }
   }
 
@@ -1563,14 +1755,14 @@
 
     if (learnModeActive && currentSong && currentSong.length) {
       const ln = currentSong[learnCurrentNoteIndex];
-      if (ln) {
+      if (!learnSequenceStarted || !ln) {
+        gainVol = 0;
+      } else {
         const pOk = Math.abs(smoothPitchNormX - ln.pitch) < LEARN_PITCH_THRESH;
         const vOk = Math.abs(smoothVol - ln.volume) < LEARN_VOL_THRESH;
         if (handCount < 2 || !pOk || !vOk) {
-          gainVol *= LEARN_WRONG_GAIN;
+          gainVol = 0;
         }
-      } else {
-        gainVol = 0;
       }
     }
 
@@ -1623,82 +1815,165 @@
     return { x: (1 - lm.x) * w, y: lm.y * h };
   }
 
-  function guideDotVisualState(userNorm, target, ok, close) {
-    const d = Math.abs(userNorm - target);
-    if (d < ok) return 'correct';
-    if (d < close) return 'warn';
-    return 'default';
-  }
-
-  function drawLearnGuideDot(px, py, baseR, state, pulseT, isNext) {
-    const pulse = 1 + Math.sin(pulseT * 0.006) * 0.065;
-    let r = baseR * pulse * (isNext ? 0.66 : 1);
-    if (state === 'correct' && !isNext) r *= 1.1;
-    let glowInner;
-    let glowMid;
-    let core;
-    if (isNext) {
-      glowInner = 'rgba(230, 232, 245, 0.2)';
-      glowMid = 'rgba(220, 224, 240, 0.09)';
-      core = 'rgba(248, 248, 255, 0.36)';
-    } else if (state === 'correct') {
-      glowInner = 'rgba(90, 255, 140, 0.55)';
-      glowMid = 'rgba(60, 200, 100, 0.28)';
-      core = 'rgba(160, 255, 190, 0.98)';
-    } else if (state === 'warn') {
-      glowInner = 'rgba(255, 110, 110, 0.48)';
-      glowMid = 'rgba(220, 60, 60, 0.22)';
-      core = 'rgba(255, 170, 170, 0.95)';
-    } else {
-      glowInner = 'rgba(248, 248, 255, 0.42)';
-      glowMid = 'rgba(230, 232, 242, 0.15)';
-      core = 'rgba(252, 252, 255, 0.94)';
-    }
+  function drawLearnDirectionalHint(cx, cy, hx, hy, rgb) {
+    const dx = hx - cx;
+    const dy = hy - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1e-4) return;
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const L = Math.min(LEARN_LINE_MAX_PX, dist);
+    const ex = cx + ux * L;
+    const ey = cy + uy * L;
     ctx.save();
-    const glow = ctx.createRadialGradient(px, py, 0, px, py, r * 3.2);
-    glow.addColorStop(0, glowInner);
-    glow.addColorStop(0.45, glowMid);
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
+    ctx.globalAlpha = LEARN_LINE_OPACITY;
+    ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.95)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(px, py, r * 3.2, 0, Math.PI * 2);
-    ctx.fill();
-    if (state === 'correct' && !isNext) {
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = 'rgba(120, 255, 160, 0.42)';
-    }
-    ctx.fillStyle = core;
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    const ah = 8;
+    const ax1 = cx + ux * ah;
+    const ay1 = cy + uy * ah;
+    const px = -uy;
+    const py = ux;
+    ctx.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.95)';
+    ctx.globalAlpha = LEARN_LINE_OPACITY;
     ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(ax1 + px * 5, ay1 + py * 5);
+    ctx.lineTo(ax1 - px * 5, ay1 - py * 5);
+    ctx.closePath();
     ctx.fill();
-    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
-  function drawLearnGuideDots(nowMs) {
+  /**
+   * @param {{ r: number, g: number, b: number }} rgb
+   * @param {{ skipYellow: boolean, matched: boolean, fillFlash: boolean, pulseScale: number, matchScale: number }} vis
+   */
+  function drawLearnRing(cx, cy, rgb, vis) {
+    const r = LEARN_RING_R * vis.pulseScale * vis.matchScale;
+    ctx.save();
+    if (vis.skipYellow) {
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = LEARN_RING_BORDER;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = 'rgba(255, 215, 0, 0.45)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      return;
+    }
+    if (vis.fillFlash) {
+      ctx.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 1)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 1)';
+      ctx.lineWidth = LEARN_RING_BORDER;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (vis.matched) {
+      ctx.fillStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.2)';
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.35)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 1)';
+      ctx.lineWidth = LEARN_RING_BORDER;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.95)';
+    ctx.lineWidth = LEARN_RING_BORDER;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLearnRingGhost(cx, cy, rgb) {
+    ctx.save();
+    ctx.globalAlpha = LEARN_GHOST_OPACITY;
+    ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ', 0.95)';
+    ctx.lineWidth = LEARN_RING_BORDER;
+    ctx.beginPath();
+    ctx.arc(cx, cy, LEARN_RING_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLearnModeOverlay(nowMs, pitchLm8, volLm8, handCount) {
     if (!learnModeActive || !currentSong || !currentSong.length) return;
-    const w = canvas.width;
-    const h = canvas.height;
     const note = currentSong[learnCurrentNoteIndex];
     if (!note) return;
-    const pulseT = nowMs;
-    const pitchPx = (1 - learnGuidePitch) * w;
-    const pitchPy = 0.38 * h;
-    const volPx = 0.24 * w;
-    const volPy = learnGuideVolY * h;
+    const w = canvas.width;
+    const h = canvas.height;
+    const pitchCx = (1 - learnGuidePitch) * w;
+    const pitchCy = 0.38 * h;
+    const volCx = 0.24 * w;
+    const volCy = learnGuideVolY * h;
 
-    const stPitch = guideDotVisualState(smoothPitchNormX, note.pitch, LEARN_PITCH_THRESH, LEARN_CLOSE_PITCH);
-    const stVol = guideDotVisualState(smoothVol, note.volume, LEARN_VOL_THRESH, LEARN_CLOSE_VOL);
+    const isPitchOk = Math.abs(smoothPitchNormX - note.pitch) < LEARN_PITCH_THRESH;
+    const isVolOk = Math.abs(smoothVol - note.volume) < LEARN_VOL_THRESH;
+    const skipYellow = nowMs < learnSkipFlashUntilMs;
 
-    drawLearnGuideDot(pitchPx, pitchPy, 10, stPitch, pulseT, false);
-    drawLearnGuideDot(volPx, volPy, 10, stVol, pulseT, false);
+    const idlePulse =
+      1 +
+      (0.5 + 0.5 * Math.sin((nowMs * 0.001 * (Math.PI * 2)) / LEARN_RING_IDLE_PULSE_S)) * 0.08;
+    const pitchMatchScale = nowMs < learnPitchMatchScaleUntilMs ? 1.2 : 1;
+    const volMatchScale = nowMs < learnVolMatchScaleUntilMs ? 1.2 : 1;
+
+    const pitchFillFlash = nowMs < learnPitchFillFlashUntilMs;
+    const volFillFlash = nowMs < learnVolFillFlashUntilMs;
+
+    drawLearnRing(pitchCx, pitchCy, LEARN_GREEN, {
+      skipYellow: skipYellow,
+      matched: isPitchOk && !pitchFillFlash,
+      fillFlash: pitchFillFlash,
+      pulseScale: idlePulse,
+      matchScale: pitchMatchScale
+    });
+    drawLearnRing(volCx, volCy, LEARN_BLUE, {
+      skipYellow: skipYellow,
+      matched: isVolOk && !volFillFlash,
+      fillFlash: volFillFlash,
+      pulseScale: idlePulse,
+      matchScale: volMatchScale
+    });
 
     const next = currentSong[learnCurrentNoteIndex + 1];
     if (next) {
-      const nPitchPx = (1 - next.pitch) * w;
-      const nVolPy = (1 - next.volume) * h;
-      drawLearnGuideDot(nPitchPx, 0.38 * h, 8, 'default', pulseT + 400, true);
-      drawLearnGuideDot(volPx, nVolPy, 8, 'default', pulseT + 400, true);
+      const gPitchCx = (1 - next.pitch) * w;
+      const gPitchCy = 0.38 * h;
+      const gVolCy = (1 - next.volume) * h;
+      drawLearnRingGhost(gPitchCx, gPitchCy, LEARN_GREEN);
+      drawLearnRingGhost(volCx, gVolCy, LEARN_BLUE);
+    }
+
+    if (pitchLm8 && handCount > 0 && !isPitchOk) {
+      const hp = lmToScreen(pitchLm8, w, h);
+      const rgb = skipYellow ? { r: 255, g: 215, b: 0 } : LEARN_GREEN;
+      drawLearnDirectionalHint(pitchCx, pitchCy, hp.x, hp.y, rgb);
+    }
+    if (volLm8 && handCount >= 2 && !isVolOk) {
+      const hv = lmToScreen(volLm8, w, h);
+      const rgb = skipYellow ? { r: 255, g: 215, b: 0 } : LEARN_BLUE;
+      drawLearnDirectionalHint(volCx, volCy, hv.x, hv.y, rgb);
     }
   }
 
@@ -1741,10 +2016,6 @@
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    if (learnModeActive && currentSong) {
-      drawLearnGuideDots(performance.now());
-    }
-
     if (list && handCount > 0 && order.length) {
       const pi = pitchHandOrderIndex(order, handCount);
       drawHandMesh(list[pi], MESH_PALETTE_PITCH);
@@ -1752,6 +2023,10 @@
         const vi = volHandOrderIndex(order, handCount);
         drawHandMesh(list[vi], MESH_PALETTE_VOL);
       }
+    }
+
+    if (learnModeActive && currentSong) {
+      drawLearnModeOverlay(performance.now(), pitchLm8, volLm8, handCount);
     }
 
     if (pitchLm8) {
