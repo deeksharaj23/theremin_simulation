@@ -694,9 +694,9 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="oneEuroFilter.js"></script>
   <script>
 (function () {
   'use strict';
@@ -704,7 +704,7 @@
   /*
    * INPUT → FEATURES → INTENT → SOUND (single MediaPipe onResults; learn guides never override real landmarks)
    * Pitch anchor: index tip (8) X only — not finger-mapped to discrete notes.
-   * Tone.js: Synth → Filter → Gain → destination; learn mode gates gain until user matches guide targets.
+   * Web Audio: OscillatorNode → GainNode → destination; setTargetAtTime for pitch/volume glide; learn mode gates gain.
    */
 
   const DEBUG_PIPELINE =
@@ -720,6 +720,11 @@
   const PITCH_MAX = 1200;
   const INDEX_TIP = 8;
   const THUMB_TIP = 4;
+
+  /** One-Euro filters on landmark-derived values (persist across frames; reset when hand lost). */
+  const pitchXFilter = new OneEuroFilter(30, 1.0, 0.007);
+  const pitchYFilter = new OneEuroFilter(30, 1.0, 0.007);
+  const volYFilter = new OneEuroFilter(30, 1.0, 0.007);
   const PINKY_TIP = 20;
   const PITCH_LERP_BASE = 0.12;
   const MICRO_TUNE_HZ = 45;
@@ -731,10 +736,6 @@
   const TRANS_VEL_LOW = 0.018;
   const TRANS_VEL_HIGH = 0.07;
   const CURVE_DAMP = 0.35;
-  const FILTER_MIN = 500;
-  const FILTER_MAX = 5200;
-  const GAIN_RAMP_FAST = 0.02;
-  const GAIN_RAMP_SLOW = 0.12;
 
   /** @type {{ spreadMin:number, spreadMax:number, openMin:number, openMax:number, curvatureBaseline:number, pitchXMin:number, pitchXMax:number, leftHanded:boolean }} */
   let cal = {
@@ -1050,9 +1051,10 @@
   const VELOCITY_THRESH = 0.02;
   const ALPHA_FAST = 0.3;
   const ALPHA_SLOW = 0.05;
-  const AUDIO_RAMP_S = 0.04;
-  const AUDIO_RAMP_PITCH_SNAP_S = 0.08;
-  const GAIN_FADE_OUT_S = 0.1;
+  /** Exponential time constant (seconds) for AudioParam.setTargetAtTime */
+  const PITCH_TIME_CONSTANT = 0.03;
+  const GAIN_TIME_CONSTANT = 0.05;
+  const SILENCE_TIME_CONSTANT = 0.08;
 
   function adaptiveSmooth(prevRaw, currRaw, smooth) {
     if (!Number.isFinite(currRaw) || !Number.isFinite(prevRaw)) {
@@ -1065,12 +1067,13 @@
     return Number.isFinite(out) ? Math.min(1, Math.max(0, out)) : smooth;
   }
 
-  /** @type {Tone.Synth | null} */
-  let synth = null;
-  /** @type {Tone.Filter | null} */
-  let filterNode = null;
-  /** @type {Tone.Gain | null} */
-  let mainGain = null;
+  /** @type {AudioContext | null} */
+  let audioCtx = null;
+  /** @type {OscillatorNode | null} */
+  let oscNode = null;
+  /** @type {GainNode | null} */
+  let masterGain = null;
+  let oscStarted = false;
   let audioRunning = false;
 
   let rawPitchHz = 550;
@@ -1162,6 +1165,24 @@
 
   window.addEventListener('resize', resizeCanvas);
 
+  window.addEventListener('beforeunload', function () {
+    if (audioCtx && audioCtx.state !== 'closed') {
+      try {
+        if (oscNode) {
+          try {
+            oscNode.frequency.cancelScheduledValues(audioCtx.currentTime);
+          } catch (_) {}
+        }
+        if (masterGain) {
+          try {
+            masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+          } catch (_) {}
+        }
+        audioCtx.close();
+      } catch (_) {}
+    }
+  });
+
   function exitLearnMode() {
     learnModeActive = false;
     currentSong = null;
@@ -1240,48 +1261,41 @@
     if (!audioRunning) {
       await startAudio();
     }
-    if (!synth) return;
-    await Tone.start();
+    if (!oscNode) return;
     launchLearn(guided);
   }
 
   async function startAudio() {
     if (audioRunning) return;
-    await Tone.start();
-    if (Tone.context.state !== 'running') {
-      try {
-        await Tone.context.resume();
-      } catch (_) {}
+    if (!audioCtx) {
+      audioCtx = new AudioContext({ latencyHint: 'interactive', sampleRate: 44100 });
+      oscNode = audioCtx.createOscillator();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
+      oscNode.connect(masterGain);
+      masterGain.connect(audioCtx.destination);
+      oscNode.type = waveTypeEl.value;
+      const startHz = Math.max(PITCH_MIN, Math.min(PITCH_MAX, smoothPitchHz));
+      oscNode.frequency.setValueAtTime(startHz, audioCtx.currentTime);
+      if (!oscStarted) {
+        oscNode.start();
+        oscStarted = true;
+      }
     }
-    synth = new Tone.Synth({
-      oscillator: { type: waveTypeEl.value },
-      envelope: { attack: 0.08, decay: 0.25, sustain: 1, release: 0.65 }
-    });
-    filterNode = new Tone.Filter(1800, 'lowpass');
-    mainGain = new Tone.Gain(0).toDestination();
-    synth.connect(filterNode);
-    filterNode.connect(mainGain);
-    const startHz = Math.max(PITCH_MIN, Math.min(PITCH_MAX, smoothPitchHz));
-    synth.triggerAttack(startHz);
+    try {
+      await audioCtx.resume();
+    } catch (_) {}
     audioRunning = true;
     btnStart.disabled = true;
     btnStop.disabled = false;
   }
 
   function stopAudio() {
-    if (!audioRunning || !synth) return;
+    if (!audioRunning) return;
     exitLearnMode();
-    try {
-      synth.triggerRelease();
-    } catch (_) {}
-    try {
-      synth.dispose();
-      filterNode.dispose();
-      mainGain.dispose();
-    } catch (_) {}
-    synth = null;
-    filterNode = null;
-    mainGain = null;
+    if (masterGain && audioCtx) {
+      masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, SILENCE_TIME_CONSTANT);
+    }
     audioRunning = false;
     lastHandCount = 0;
     btnStart.disabled = false;
@@ -1289,8 +1303,8 @@
   }
 
   waveTypeEl.addEventListener('change', function () {
-    if (synth && synth.oscillator) {
-      synth.oscillator.type = waveTypeEl.value;
+    if (oscNode) {
+      oscNode.type = waveTypeEl.value;
     }
   });
 
@@ -1298,8 +1312,8 @@
   btnStop.addEventListener('click', stopAudio);
 
   function ensureAudioRunning() {
-    if (typeof Tone !== 'undefined' && Tone.context && Tone.context.state === 'suspended') {
-      Tone.start().catch(function () {});
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
     }
   }
   document.addEventListener('click', ensureAudioRunning, true);
@@ -1338,7 +1352,7 @@
   });
 
   /**
-   * REAL landmarks only → features → intent → Tone mapping (never ghost/learn).
+   * REAL landmarks only → features → intent → audio mapping (never ghost/learn).
    */
   function applyAudioFromHands(pitchLm8, volLm8, handCount, pitchHandLandmarks, volHandLandmarks) {
     const scaleLock = scaleLockEl.checked;
@@ -1349,8 +1363,10 @@
     let jitter = 0;
 
     if (pitchHandLandmarks) {
-      const ax = pitchHandLandmarks[INDEX_TIP].x;
-      const ay = pitchHandLandmarks[INDEX_TIP].y;
+      const rawAx = pitchHandLandmarks[INDEX_TIP].x;
+      const rawAy = pitchHandLandmarks[INDEX_TIP].y;
+      const ax = pitchXFilter.filter(rawAx, nowMs);
+      const ay = pitchYFilter.filter(rawAy, nowMs);
       rawPitchHz = hzFromPitchX(ax);
       smoothPitchNormX = adaptiveSmooth(prevRawPitchX, ax, smoothPitchNormX);
       prevRawPitchX = ax;
@@ -1381,6 +1397,8 @@
         return { x: pitchHandLandmarks[id].x, y: pitchHandLandmarks[id].y };
       });
     } else {
+      pitchXFilter.reset();
+      pitchYFilter.reset();
       pitchJitterBuf.length = 0;
       smoothOpen = adaptiveSmooth(prevRawOpen, 0, smoothOpen);
       prevRawOpen = 0;
@@ -1388,15 +1406,18 @@
     }
 
     if (handCount >= 2 && volHandLandmarks) {
-      const currVolY = avgStableY(volHandLandmarks);
+      const rawVolY = avgStableY(volHandLandmarks);
+      const currVolY = volYFilter.filter(rawVolY, nowMs);
       smoothVolY = adaptiveSmooth(prevRawVolY, currVolY, smoothVolY);
       prevRawVolY = currVolY;
       smoothVol = yToRawVolume(smoothVolY);
     } else if (handCount === 1) {
+      volYFilter.reset();
       smoothVolY = adaptiveSmooth(prevRawVolY, 0.5, smoothVolY);
       prevRawVolY = 0.5;
       smoothVol = yToRawVolume(smoothVolY);
     } else {
+      volYFilter.reset();
       smoothVolY = adaptiveSmooth(prevRawVolY, 1, smoothVolY);
       prevRawVolY = 1;
       smoothVol = yToRawVolume(smoothVolY);
@@ -1456,28 +1477,21 @@
     featureLine.textContent =
       'Stability ' + stab.toFixed(2) + ' · jitter ' + jitter.toFixed(4) + ' · vel ' + handVelocity.toFixed(3);
 
-    const hadHands = lastHandCount > 0;
-    const handsLost = handCount === 0 && hadHands;
     lastHandCount = handCount;
 
-    if (!audioRunning || !synth || !filterNode || !mainGain) return;
+    if (!audioRunning || !audioCtx || !oscNode || !masterGain) return;
 
-    if (Tone.context.state === 'suspended') {
-      Tone.context.resume().catch(function () {});
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
     }
 
+    const t = audioCtx.currentTime;
+    oscNode.frequency.setTargetAtTime(outHz, t, PITCH_TIME_CONSTANT);
+
     const volClamped = Number.isFinite(smoothVol) ? Math.min(1, Math.max(0, smoothVol)) : 0;
-    let gainVol = handCount >= 2 ? Math.max(0.14, volClamped) : volClamped;
+    let volPercept = Math.pow(volClamped, 0.4);
+    let gainVol = handCount >= 2 ? Math.max(0.14, volPercept) : volPercept;
     gainVol *= curveDamp;
-
-    const fLo = mode === 'EXPRESSIVE' ? FILTER_MIN : FILTER_MIN + 200;
-    const fHi = mode === 'EXPRESSIVE' ? FILTER_MAX : FILTER_MAX - 600;
-    const fTarget = lerp(fLo, fHi, smoothSpread);
-    filterNode.frequency.rampTo(fTarget, 0.05);
-
-    synth.envelope.attack = handVelocity > VEL_FAST ? 0.01 : 0.2;
-
-    const rampT = intent === 'ATTACK' || handVelocity > VEL_FAST ? GAIN_RAMP_FAST : GAIN_RAMP_SLOW;
 
     if (learnModeActive && currentSong && currentSong.length) {
       const ln = currentSong[learnCurrentNoteIndex];
@@ -1492,13 +1506,11 @@
       }
     }
 
-    if (handsLost) {
-      mainGain.gain.rampTo(0, GAIN_FADE_OUT_S);
-    } else if (handCount > 0) {
-      mainGain.gain.rampTo(gainVol, rampT);
+    if (handCount === 0) {
+      masterGain.gain.setTargetAtTime(0, t, SILENCE_TIME_CONSTANT);
+    } else {
+      masterGain.gain.setTargetAtTime(gainVol, t, GAIN_TIME_CONSTANT);
     }
-
-    synth.frequency.rampTo(outHz, AUDIO_RAMP_PITCH_SNAP_S);
   }
 
   function drawFingerDotAt(lm8, glowInner, glowMid, core) {
@@ -2143,7 +2155,7 @@
         });
         console.log(
           'AUDIO',
-          typeof Tone !== 'undefined' && Tone.context ? Tone.context.state : 'no-tone',
+          audioCtx ? audioCtx.state : 'no-ctx',
           'audioRunning:',
           audioRunning
         );
