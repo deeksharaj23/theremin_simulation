@@ -716,8 +716,16 @@
     261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88
   ];
 
-  const PITCH_MIN = 200;
-  const PITCH_MAX = 1200;
+  /** Logarithmic pitch range (MIDI); Hz derived for clamps / display. */
+  const PITCH_MIN_NOTE = 36;
+  const PITCH_MAX_NOTE = 84;
+
+  function hzFromMidiNote(noteNumber) {
+    return 440 * Math.pow(2, (noteNumber - 69) / 12);
+  }
+
+  const PITCH_MIN = hzFromMidiNote(PITCH_MIN_NOTE);
+  const PITCH_MAX = hzFromMidiNote(PITCH_MAX_NOTE);
   const INDEX_TIP = 8;
   const THUMB_TIP = 4;
 
@@ -789,18 +797,22 @@
     return Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
   }
 
-  /** Map index X (camera space 0–1) to Hz; left→right = low→high */
+  /** Map index X (camera space 0–1) to Hz; calibrated strip uses equal temperament (octaves = equal hand span). */
   function hzFromPitchX(xNorm) {
     const x = Number.isFinite(xNorm) ? Math.min(1, Math.max(0, xNorm)) : 0.5;
     const t = norm01(x, cal.pitchXMin, cal.pitchXMax);
-    const hz = PITCH_MIN + t * (PITCH_MAX - PITCH_MIN);
+    const noteNumber = PITCH_MIN_NOTE + t * (PITCH_MAX_NOTE - PITCH_MIN_NOTE);
+    const hz = hzFromMidiNote(noteNumber);
     return Number.isFinite(hz) ? hz : PITCH_MIN;
   }
 
-  /** Normalized X (0–1) where pitch strip matches: 0 = low freq, 1 = high freq */
+  /** Inverse of hzFromPitchX for learn guides / song dots (Hz → normalized X along strip). */
   function normXFromHz(freqHz) {
-    const t = (freqHz - PITCH_MIN) / (PITCH_MAX - PITCH_MIN);
-    const x = cal.pitchXMin + Math.min(1, Math.max(0, t)) * (cal.pitchXMax - cal.pitchXMin);
+    const f = Number.isFinite(freqHz) ? Math.max(PITCH_MIN, Math.min(PITCH_MAX, freqHz)) : PITCH_MIN;
+    const note = 69 + 12 * (Math.log(f / 440) / Math.LN2);
+    const t = (note - PITCH_MIN_NOTE) / (PITCH_MAX_NOTE - PITCH_MIN_NOTE);
+    const tClamped = Math.min(1, Math.max(0, t));
+    const x = cal.pitchXMin + tClamped * (cal.pitchXMax - cal.pitchXMin);
     return Math.min(1, Math.max(0, x));
   }
 
@@ -1069,12 +1081,51 @@
 
   /** @type {AudioContext | null} */
   let audioCtx = null;
-  /** @type {OscillatorNode | null} */
-  let oscNode = null;
+  /** @type {Array<{ osc: OscillatorNode, multiplier: number }> | null} */
+  let voiceOscillators = null;
+  /** @type {GainNode | null} */
+  let mixerGain = null;
   /** @type {GainNode | null} */
   let masterGain = null;
   let oscStarted = false;
   let audioRunning = false;
+
+  function buildVoice(ctx) {
+    const mixer = ctx.createGain();
+    mixer.gain.value = 0.2;
+    const configs = [
+      { multiplier: 1, detune: 0, gain: 1.0 },
+      { multiplier: 2, detune: 0, gain: 0.3 },
+      { multiplier: 3, detune: 0, gain: 0.1 },
+      { multiplier: 1, detune: 4, gain: 0.15 },
+      { multiplier: 1, detune: -4, gain: 0.15 }
+    ];
+    const oscillators = configs.map(function (cfg) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.detune.value = cfg.detune;
+      g.gain.value = cfg.gain;
+      osc.connect(g);
+      g.connect(mixer);
+      return { osc: osc, multiplier: cfg.multiplier };
+    });
+    return { oscillators: oscillators, mixerGain: mixer };
+  }
+
+  function setVoiceFrequency(oscillators, targetFreq, ctx) {
+    const t = ctx.currentTime;
+    const tc = PITCH_TIME_CONSTANT;
+    oscillators.forEach(function (o) {
+      o.osc.frequency.setTargetAtTime(targetFreq * o.multiplier, t, tc);
+    });
+  }
+
+  function setVoiceWaveform(oscillators, type) {
+    oscillators.forEach(function (o) {
+      o.osc.type = type;
+    });
+  }
 
   let rawPitchHz = 550;
   let smoothPitchHz = 550;
@@ -1168,9 +1219,19 @@
   window.addEventListener('beforeunload', function () {
     if (audioCtx && audioCtx.state !== 'closed') {
       try {
-        if (oscNode) {
+        if (voiceOscillators) {
+          voiceOscillators.forEach(function (o) {
+            try {
+              o.osc.frequency.cancelScheduledValues(audioCtx.currentTime);
+            } catch (_) {}
+            try {
+              o.osc.stop();
+            } catch (_) {}
+          });
+        }
+        if (mixerGain) {
           try {
-            oscNode.frequency.cancelScheduledValues(audioCtx.currentTime);
+            mixerGain.gain.cancelScheduledValues(audioCtx.currentTime);
           } catch (_) {}
         }
         if (masterGain) {
@@ -1261,7 +1322,7 @@
     if (!audioRunning) {
       await startAudio();
     }
-    if (!oscNode) return;
+    if (!voiceOscillators || !voiceOscillators.length) return;
     launchLearn(guided);
   }
 
@@ -1269,16 +1330,22 @@
     if (audioRunning) return;
     if (!audioCtx) {
       audioCtx = new AudioContext({ latencyHint: 'interactive', sampleRate: 44100 });
-      oscNode = audioCtx.createOscillator();
+      const voice = buildVoice(audioCtx);
+      voiceOscillators = voice.oscillators;
+      mixerGain = voice.mixerGain;
       masterGain = audioCtx.createGain();
       masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
-      oscNode.connect(masterGain);
+      mixerGain.connect(masterGain);
       masterGain.connect(audioCtx.destination);
-      oscNode.type = waveTypeEl.value;
+      setVoiceWaveform(voiceOscillators, waveTypeEl.value);
       const startHz = Math.max(PITCH_MIN, Math.min(PITCH_MAX, smoothPitchHz));
-      oscNode.frequency.setValueAtTime(startHz, audioCtx.currentTime);
+      voiceOscillators.forEach(function (o) {
+        o.osc.frequency.setValueAtTime(startHz * o.multiplier, audioCtx.currentTime);
+      });
       if (!oscStarted) {
-        oscNode.start();
+        voiceOscillators.forEach(function (o) {
+          o.osc.start();
+        });
         oscStarted = true;
       }
     }
@@ -1303,8 +1370,8 @@
   }
 
   waveTypeEl.addEventListener('change', function () {
-    if (oscNode) {
-      oscNode.type = waveTypeEl.value;
+    if (voiceOscillators) {
+      setVoiceWaveform(voiceOscillators, waveTypeEl.value);
     }
   });
 
@@ -1479,14 +1546,15 @@
 
     lastHandCount = handCount;
 
-    if (!audioRunning || !audioCtx || !oscNode || !masterGain) return;
+    if (!audioRunning || !audioCtx || !voiceOscillators || !masterGain) return;
 
     if (audioCtx.state === 'suspended') {
       audioCtx.resume().catch(function () {});
     }
 
+    setVoiceFrequency(voiceOscillators, outHz, audioCtx);
+
     const t = audioCtx.currentTime;
-    oscNode.frequency.setTargetAtTime(outHz, t, PITCH_TIME_CONSTANT);
 
     const volClamped = Number.isFinite(smoothVol) ? Math.min(1, Math.max(0, smoothVol)) : 0;
     let volPercept = Math.pow(volClamped, 0.4);
