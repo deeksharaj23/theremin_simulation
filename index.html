@@ -656,7 +656,6 @@
       <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
         <button type="button" class="learn-song" data-song="sargam">Sa Re Ga Ma Pa</button>
         <button type="button" class="learn-song" data-song="birthday">Happy Birthday</button>
-        <button type="button" class="learn-song" data-song="comfortablyNumb">Comfortably Numb</button>
       </div>
       <div id="learn-banner" class="learn-banner hidden" role="status">Move your hands into the circles to begin</div>
     </div>
@@ -931,94 +930,53 @@
   /** @typedef {{ n: string, d: number, v?: number }} SongRawNote */
   /** @type {Record<string, SongRawNote[]>} */
   const SONGS_RAW = {
-    sargam: [
-      { n: 'C', d: 720, v: 0.62 }, { n: 'D', d: 680, v: 0.62 }, { n: 'E', d: 760, v: 0.62 },
-      { n: 'F', d: 640, v: 0.62 }, { n: 'G', d: 1100, v: 0.65 }
-    ],
-    birthday: [
-      { n: 'C', d: 420, v: 0.58 }, { n: 'C', d: 200, v: 0.58 }, { n: 'D', d: 700, v: 0.6 }, { n: 'C', d: 700, v: 0.58 },
-      { n: 'F', d: 700, v: 0.62 }, { n: 'E', d: 800, v: 0.6 },
-      { n: 'C', d: 420, v: 0.58 }, { n: 'C', d: 200, v: 0.58 }, { n: 'D', d: 700, v: 0.6 }, { n: 'C', d: 700, v: 0.58 },
-      { n: 'G', d: 700, v: 0.64 }, { n: 'F', d: 1000, v: 0.6 }
-    ],
     /**
-     * Comfortably Numb (Pink Floyd) — from piano arr., ~60 BPM (q=1000 ms), B minor.
-     * Intro (p) + verse (mf) + opening chorus (f); simplified vs full score for learn mode.
+     * C-major sargam: Sa Re Ga Ma Pa Dha Ni Sa (up), then Ni Dha Pa Ma Ga Re Sa (down).
+     * Octave spelling matches hzFromNoteName (C4–C5).
      */
-    comfortablyNumb: [
-      { n: 'B4', d: 4000, v: 0.34 },
-      { n: 'B4', d: 4000, v: 0.34 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'E5', d: 250, v: 0.62 },
-      { n: 'F#5', d: 500, v: 0.62 },
-      { n: 'E5', d: 500, v: 0.62 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'C#5', d: 250, v: 0.62 },
-      { n: 'B4', d: 2000, v: 0.62 },
-      { n: 'B4', d: 4000, v: 0.62 },
-      { n: 'B4', d: 500, v: 0.62 },
-      { n: 'A4', d: 500, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'G4', d: 2000, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'B4', d: 500, v: 0.62 },
-      { n: 'A4', d: 250, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'F#4', d: 500, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'F#4', d: 500, v: 0.62 },
-      { n: 'F#4', d: 1000, v: 0.62 },
-      { n: 'B4', d: 4000, v: 0.62 },
-      { n: 'E5', d: 750, v: 0.62 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'E5', d: 500, v: 0.62 },
-      { n: 'D5', d: 500, v: 0.62 },
-      { n: 'E5', d: 750, v: 0.62 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'E5', d: 1000, v: 0.62 },
-      { n: 'D5', d: 4000, v: 0.62 },
-      { n: 'B4', d: 500, v: 0.62 },
-      { n: 'A4', d: 500, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'G4', d: 2000, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'B4', d: 500, v: 0.62 },
-      { n: 'A4', d: 250, v: 0.62 },
-      { n: 'G4', d: 250, v: 0.62 },
-      { n: 'F#4', d: 500, v: 0.62 },
-      { n: 'G4', d: 500, v: 0.62 },
-      { n: 'F#4', d: 500, v: 0.62 },
-      { n: 'F#4', d: 1000, v: 0.62 },
-      { n: 'B4', d: 4000, v: 0.62 },
-      { n: 'E5', d: 750, v: 0.62 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'E5', d: 500, v: 0.62 },
-      { n: 'D5', d: 500, v: 0.62 },
-      { n: 'E5', d: 750, v: 0.62 },
-      { n: 'D5', d: 250, v: 0.62 },
-      { n: 'E5', d: 1000, v: 0.62 },
-      { n: 'D5', d: 4000, v: 0.62 },
-      { n: 'B5', d: 4000, v: 0.9 },
-      { n: 'A5', d: 4000, v: 0.9 },
-      { n: 'G5', d: 4000, v: 0.9 },
-      { n: 'D5', d: 4000, v: 0.9 },
-      { n: 'B5', d: 1000, v: 0.9 },
-      { n: 'B5', d: 1000, v: 0.9 },
-      { n: 'B5', d: 1000, v: 0.9 },
-      { n: 'B5', d: 1000, v: 0.9 },
-      { n: 'A5', d: 1000, v: 0.9 },
-      { n: 'A5', d: 1000, v: 0.9 },
-      { n: 'A5', d: 1000, v: 0.9 },
-      { n: 'A5', d: 1000, v: 0.9 },
-      { n: 'G5', d: 1000, v: 0.9 },
-      { n: 'G5', d: 1000, v: 0.9 },
-      { n: 'G5', d: 1000, v: 0.9 },
-      { n: 'G5', d: 1000, v: 0.9 },
-      { n: 'D5', d: 4000, v: 0.88 }
+    sargam: [
+      { n: 'C4', d: 550, v: 0.62 },
+      { n: 'D4', d: 550, v: 0.62 },
+      { n: 'E4', d: 550, v: 0.62 },
+      { n: 'F4', d: 550, v: 0.62 },
+      { n: 'G4', d: 550, v: 0.62 },
+      { n: 'A4', d: 550, v: 0.62 },
+      { n: 'B4', d: 550, v: 0.62 },
+      { n: 'C5', d: 750, v: 0.65 },
+      { n: 'B4', d: 550, v: 0.62 },
+      { n: 'A4', d: 550, v: 0.62 },
+      { n: 'G4', d: 550, v: 0.62 },
+      { n: 'F4', d: 550, v: 0.62 },
+      { n: 'E4', d: 550, v: 0.62 },
+      { n: 'D4', d: 550, v: 0.62 },
+      { n: 'C4', d: 1000, v: 0.65 }
+    ],
+    /** Happy Birthday — standard four-line melody in C (starting on G4). */
+    birthday: [
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'A4', d: 580, v: 0.6 },
+      { n: 'G4', d: 580, v: 0.58 },
+      { n: 'C5', d: 580, v: 0.62 },
+      { n: 'B4', d: 1100, v: 0.62 },
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'A4', d: 580, v: 0.6 },
+      { n: 'G4', d: 580, v: 0.58 },
+      { n: 'D5', d: 580, v: 0.64 },
+      { n: 'C5', d: 1100, v: 0.62 },
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'G4', d: 300, v: 0.58 },
+      { n: 'E5', d: 580, v: 0.64 },
+      { n: 'C5', d: 580, v: 0.6 },
+      { n: 'B4', d: 580, v: 0.6 },
+      { n: 'A4', d: 1100, v: 0.62 },
+      { n: 'F5', d: 300, v: 0.62 },
+      { n: 'F5', d: 300, v: 0.62 },
+      { n: 'E5', d: 580, v: 0.62 },
+      { n: 'C5', d: 580, v: 0.6 },
+      { n: 'D5', d: 580, v: 0.62 },
+      { n: 'C5', d: 1500, v: 0.65 }
     ]
   };
 
@@ -1056,6 +1014,15 @@
 
   function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  /**
+   * Two hands: compare live volume to the note target. One hand: volume is fixed by the
+   * audio pipeline (~0.5), so a volume ring target cannot be met — treat as aligned.
+   */
+  function learnVolumeMatchesNote(handCount, note) {
+    if (handCount < 2) return true;
+    return Math.abs(smoothVol - note.volume) < LEARN_VOL_THRESH;
   }
 
   function snapToScale(freq, scaleArr) {
@@ -1462,29 +1429,15 @@
     }
 
     const isPitchCorrect = Math.abs(smoothPitchNormX - note.pitch) < LEARN_PITCH_THRESH;
-    const isVolumeCorrect = Math.abs(smoothVol - note.volume) < LEARN_VOL_THRESH;
-    const bothCorrect = handCount >= 2 && isPitchCorrect && isVolumeCorrect;
+    const isVolumeCorrect = learnVolumeMatchesNote(handCount, note);
+    const bothCorrect = handCount >= 1 && isPitchCorrect && isVolumeCorrect;
     learnIsMatched = bothCorrect;
-
-    const userPitch = smoothPitchNormX;
-    const userVolume = smoothVol;
-    console.log({
-      userPitch: userPitch,
-      targetPitch: targetPitch,
-      pitchDiff: Math.abs(userPitch - targetPitch),
-      userVolume: userVolume,
-      targetVolume: note.volume,
-      volumeDiff: Math.abs(userVolume - note.volume),
-      isPitchCorrect: isPitchCorrect,
-      isVolumeCorrect: isVolumeCorrect,
-      isCorrect: bothCorrect
-    });
 
     if (isPitchCorrect && !learnPrevPitchMatched) {
       learnPitchMatchScaleUntilMs = nowMs + LEARN_MATCH_SCALE_MS;
       learnPitchFillFlashUntilMs = nowMs + 150;
     }
-    if (isVolumeCorrect && !learnPrevVolMatched) {
+    if (handCount >= 2 && isVolumeCorrect && !learnPrevVolMatched) {
       learnVolMatchScaleUntilMs = nowMs + LEARN_MATCH_SCALE_MS;
       learnVolFillFlashUntilMs = nowMs + 150;
     }
@@ -1773,8 +1726,8 @@
         gainVol = 0;
       } else {
         const pOk = Math.abs(smoothPitchNormX - ln.pitch) < LEARN_PITCH_THRESH;
-        const vOk = Math.abs(smoothVol - ln.volume) < LEARN_VOL_THRESH;
-        if (handCount < 2 || !pOk || !vOk) {
+        const vOk = learnVolumeMatchesNote(handCount, ln);
+        if (!pOk || !vOk) {
           gainVol = 0;
         }
       }
@@ -1943,7 +1896,7 @@
     const volCy = learnGuideVolY * h;
 
     const isPitchOk = Math.abs(smoothPitchNormX - note.pitch) < LEARN_PITCH_THRESH;
-    const isVolOk = Math.abs(smoothVol - note.volume) < LEARN_VOL_THRESH;
+    const isVolOk = learnVolumeMatchesNote(handCount, note);
     const skipYellow = nowMs < learnSkipFlashUntilMs;
 
     const idlePulse =
