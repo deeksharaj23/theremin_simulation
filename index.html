@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Web Theremin</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23141420' stroke='%23446688' stroke-width='1'/%3E%3C/svg%3E" />
   <style>
@@ -782,6 +782,140 @@
     }
     #theremin-intro a.theremin-intro-more:hover {
       background: rgba(38, 38, 56, 0.62);
+    }
+
+    /* —— Mobile / narrow viewports —— */
+    @media (max-width: 768px) {
+      :root {
+        --controls-chip-height: 2.75rem;
+      }
+      #hud {
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        top: max(0.5rem, env(safe-area-inset-top, 0px));
+        width: min(calc(100% - 10.5rem), calc(100vw - 1rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+        max-width: min(22rem, calc(100vw - 10.5rem));
+        font-size: 0.82rem;
+      }
+      .hud-primary-row {
+        min-height: 2.5rem;
+        padding: 0.45rem 0.55rem;
+      }
+      .hud-technical {
+        font-size: 0.74rem;
+        min-height: auto;
+        padding: 0.4rem 0.5rem;
+      }
+      .hud-technical > div {
+        min-height: 1.3rem;
+      }
+      #theremin-intro {
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        top: max(0.5rem, env(safe-area-inset-top, 0px));
+        left: auto;
+        max-width: min(9.75rem, calc(100vw - 1rem));
+        padding: 0.5rem 0.6rem;
+      }
+      #theremin-intro:not(.collapsed) {
+        position: fixed;
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        top: max(0.5rem, env(safe-area-inset-top, 0px));
+        max-width: none;
+        width: auto;
+        max-height: min(48vh, 320px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        z-index: 60;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      }
+      #theremin-intro h2 {
+        font-size: 0.82rem;
+      }
+      .theremin-intro-toggle {
+        width: 2.75rem;
+        height: 2.75rem;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+      }
+      #controls {
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        max-width: none;
+      }
+      .controls-panel {
+        flex-wrap: wrap;
+        justify-content: center;
+        align-content: center;
+        gap: 0.4rem;
+        row-gap: 0.45rem;
+        padding: 0.4rem 0.45rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+        overflow-x: visible;
+        overflow-y: visible;
+      }
+      .controls-row {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.4rem;
+      }
+      .icon-btn {
+        min-height: 2.75rem;
+        min-width: max(5.1rem, 44px);
+      }
+      #learn-wrap {
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+        max-width: calc(100% - 1rem);
+      }
+      #btnLearn {
+        min-height: 44px;
+        padding: 0.5rem 0.85rem;
+        font-size: 0.85rem;
+      }
+      .hint-strip {
+        bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+        max-width: calc(100% - 1rem);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+        padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+      }
+      .learn-note-hud {
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        transform: none;
+        top: max(0.5rem, env(safe-area-inset-top, 0px));
+        width: auto;
+        max-width: none;
+        text-align: center;
+        font-size: 0.82rem;
+      }
+      #btnExitLearn {
+        top: max(0.5rem, env(safe-area-inset-top, 0px));
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        min-height: 44px;
+      }
+      #calibration-overlay {
+        padding: max(0.75rem, env(safe-area-inset-top, 0px)) max(0.75rem, env(safe-area-inset-right, 0px)) max(0.75rem, env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-left, 0px));
+      }
+      .cal-shell {
+        padding: 0.85rem 0.9rem 1rem;
+      }
+    }
+
+    @media (max-width: 380px) {
+      #hud {
+        width: min(calc(100% - 9rem), calc(100vw - 0.75rem));
+        max-width: min(20rem, calc(100vw - 9rem));
+        font-size: 0.78rem;
+      }
+      #theremin-intro {
+        max-width: min(8.5rem, 38vw);
+      }
+      .hud-technical-toggle {
+        font-size: 0.65rem;
+        padding: 0.3rem 0.4rem;
+      }
     }
   </style>
 </head>
@@ -1803,6 +1937,7 @@
   }
 
   syncIntroForViewport();
+  window.addEventListener('resize', syncIntroForViewport);
 
   document.querySelectorAll('.learn-song').forEach(function (el) {
     el.addEventListener('click', function () {
