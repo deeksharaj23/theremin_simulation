@@ -787,6 +787,11 @@
       background: rgba(38, 38, 56, 0.62);
     }
 
+    /* Wrapper only affects layout on mobile; desktop uses display:contents so children stay positioned as before. */
+    .mobile-bottom-cluster {
+      display: contents;
+    }
+
     /* —— Mobile / narrow viewports —— */
     @media (max-width: 768px) {
       :root {
@@ -845,12 +850,6 @@
         min-width: 2.75rem;
         min-height: 2.75rem;
       }
-      #controls {
-        right: max(0.5rem, env(safe-area-inset-right, 0px));
-        bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
-        left: max(0.5rem, env(safe-area-inset-left, 0px));
-        max-width: none;
-      }
       .controls-panel {
         flex-wrap: wrap;
         justify-content: center;
@@ -883,14 +882,44 @@
         height: calc(var(--controls-chip-height) - 4px);
         line-height: calc(var(--controls-chip-height) - 6px);
       }
+      .mobile-bottom-cluster {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 0.75rem;
+        position: absolute;
+        left: max(0.5rem, env(safe-area-inset-left, 0px));
+        right: max(0.5rem, env(safe-area-inset-right, 0px));
+        bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+        width: auto;
+        max-width: none;
+        pointer-events: none;
+        z-index: 20;
+      }
+      .mobile-bottom-cluster > * {
+        pointer-events: auto;
+      }
       #learn-wrap {
-        left: 50%;
+        position: static;
+        transform: none;
+        left: auto;
         right: auto;
-        transform: translateX(-50%);
-        bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+        bottom: auto;
         max-width: min(22rem, calc(100% - 1.25rem));
         width: max-content;
         align-items: center;
+        z-index: 25;
+      }
+      #controls {
+        position: static;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        z-index: 20;
       }
       #btnLearn {
         min-height: 48px;
@@ -900,7 +929,8 @@
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
       }
       .hint-strip {
-        bottom: calc(9.25rem + env(safe-area-inset-bottom, 0px));
+        bottom: auto;
+        top: max(22vh, calc(env(safe-area-inset-top, 0px) + 3.5rem));
         max-width: min(22rem, calc(100% - 1.25rem));
         font-size: 0.8rem;
         line-height: 1.45;
@@ -914,6 +944,10 @@
         text-shadow:
           0 1px 3px rgba(0, 0, 0, 0.95),
           0 0 1px rgba(0, 0, 0, 0.9);
+      }
+      .learn-progress-wrap {
+        z-index: 12;
+        bottom: max(0px, env(safe-area-inset-bottom, 0px));
       }
       .hint-strip .hint-long {
         display: none;
@@ -941,6 +975,19 @@
       }
       .cal-shell {
         padding: 0.85rem 0.9rem 1rem;
+      }
+    }
+
+    @media (max-width: 768px) and (max-height: 520px) {
+      .hint-strip {
+        top: max(0.35rem, env(safe-area-inset-top, 0px));
+        padding: 0.35rem 0.5rem;
+        line-height: 1.25;
+        font-size: 0.72rem;
+      }
+      .mobile-bottom-cluster {
+        gap: 0.5rem;
+        bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
       }
     }
 
@@ -1031,45 +1078,47 @@
     <div id="learn-progress-wrap" class="learn-progress-wrap hidden" aria-hidden="true">
       <div id="learn-progress-fill" class="learn-progress-fill"></div>
     </div>
-    <div id="learn-wrap">
-      <button type="button" id="btnLearn">Learn to play</button>
-      <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
-        <button type="button" class="learn-song" data-song="sargam">Sa Re Ga Ma Pa</button>
-        <button type="button" class="learn-song" data-song="birthday">Happy Birthday</button>
+    <div class="mobile-bottom-cluster">
+      <div id="learn-wrap">
+        <button type="button" id="btnLearn">Learn to play</button>
+        <div id="learn-panel" class="learn-panel hidden" role="dialog" aria-label="Choose a melody">
+          <button type="button" class="learn-song" data-song="sargam">Sa Re Ga Ma Pa</button>
+          <button type="button" class="learn-song" data-song="birthday">Happy Birthday</button>
+        </div>
+        <div id="learn-banner" class="learn-banner hidden" role="status">Move your hands into the circles to begin</div>
       </div>
-      <div id="learn-banner" class="learn-banner hidden" role="status">Move your hands into the circles to begin</div>
-    </div>
-    <div id="controls">
-      <div class="controls-panel">
-        <div class="controls-row">
-          <button type="button" id="btnStart" class="icon-btn" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-            <span>Start</span>
-          </button>
-          <button type="button" id="btnStop" class="icon-btn" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
-            <span>Stop</span>
+      <div id="controls">
+        <div class="controls-panel">
+          <div class="controls-row">
+            <button type="button" id="btnStart" class="icon-btn" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <span>Start</span>
+            </button>
+            <button type="button" id="btnStop" class="icon-btn" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
+              <span>Stop</span>
+            </button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="scaleLock" checked />
+            <svg class="lock-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="10" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span>C Major</span>
+          </label>
+          <div class="control-field">
+            <span class="control-field-label">Wave</span>
+            <select id="waveType" aria-label="Waveform">
+              <option value="sine" selected>sine</option>
+              <option value="triangle">triangle</option>
+              <option value="sawtooth">sawtooth</option>
+            </select>
+          </div>
+          <button type="button" id="btnRecalibrate" class="control-field cal-ctl-btn">
+            Calibrate
           </button>
         </div>
-        <label class="toggle">
-          <input type="checkbox" id="scaleLock" checked />
-          <svg class="lock-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <rect x="5" y="11" width="14" height="10" rx="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <span>C Major</span>
-        </label>
-        <div class="control-field">
-          <span class="control-field-label">Wave</span>
-          <select id="waveType" aria-label="Waveform">
-            <option value="sine" selected>sine</option>
-            <option value="triangle">triangle</option>
-            <option value="sawtooth">sawtooth</option>
-          </select>
-        </div>
-        <button type="button" id="btnRecalibrate" class="control-field cal-ctl-btn">
-          Calibrate
-        </button>
       </div>
     </div>
   </div>
